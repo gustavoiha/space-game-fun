@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -7,10 +8,17 @@ using UnityEngine;
 /// - Spawns the player near that system (in empty space)
 /// - Spawns wormhole gates for the current system
 /// - Handles jumps between systems
+/// - Notifies listeners when galaxy state changes (for UI refresh)
 /// </summary>
 public class GameManager : MonoBehaviour
 {
     public static GameManager Instance { get; private set; }
+
+    /// <summary>
+    /// Raised whenever the player's galaxy-related state changes in a way
+    /// that should be reflected in UI (e.g. current system, discovery).
+    /// </summary>
+    public static event Action OnGalaxyStateChanged;
 
     [Header("References")]
     public GalaxyGenerator galaxy;
@@ -78,6 +86,8 @@ public class GameManager : MonoBehaviour
 
         SpawnPlayerAtSystem(currentSystemId);
         SpawnWormholeGates();
+
+        RaiseGalaxyStateChanged();
     }
 
     private void SpawnPlayerAtSystem(int systemId)
@@ -86,7 +96,7 @@ public class GameManager : MonoBehaviour
         if (sys == null) return;
 
         // Random horizontal direction from system centre.
-        Vector3 dir = Random.onUnitSphere;
+        Vector3 dir = UnityEngine.Random.onUnitSphere;
         dir.y = 0f;
         if (dir.sqrMagnitude < 0.0001f) dir = Vector3.forward;
         dir.Normalize();
@@ -176,7 +186,7 @@ public class GameManager : MonoBehaviour
 
     /// <summary>
     /// Performs a jump for a given ship to a target system.
-    /// Player ships also update currentSystemId, discovery, and gates.
+    /// Player ships also update currentSystemId, discovery, gates, and notify UI.
     /// </summary>
     public void JumpShipToSystem(ShipWormholeNavigator ship, int targetSystemId)
     {
@@ -196,11 +206,13 @@ public class GameManager : MonoBehaviour
 
             SpawnPlayerAtSystem(currentSystemId);
             SpawnWormholeGates();
+
+            RaiseGalaxyStateChanged();
         }
         else
         {
             // NPC: just move this ship to the new system's space.
-            Vector3 dir = Random.onUnitSphere;
+            Vector3 dir = UnityEngine.Random.onUnitSphere;
             dir.y = 0f;
             if (dir.sqrMagnitude < 0.0001f) dir = Vector3.forward;
             dir.Normalize();
@@ -209,5 +221,10 @@ public class GameManager : MonoBehaviour
             ship.transform.position = spawnPos;
             ship.transform.LookAt(targetSys.position);
         }
+    }
+
+    private void RaiseGalaxyStateChanged()
+    {
+        OnGalaxyStateChanged?.Invoke();
     }
 }

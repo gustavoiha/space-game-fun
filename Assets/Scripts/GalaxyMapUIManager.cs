@@ -11,6 +11,7 @@ using TMPro;
 /// - Highlights current system and shows its name
 /// - Renders UI lines between discovered systems that are connected by wormholes
 /// - Toggle with M (new Input System)
+/// - Automatically refreshes when galaxy state changes
 /// </summary>
 public class GalaxyMapUIManager : MonoBehaviour
 {
@@ -44,6 +45,16 @@ public class GalaxyMapUIManager : MonoBehaviour
     private readonly List<GameObject> lineInstances = new List<GameObject>();
     private readonly Dictionary<int, RectTransform> iconBySystemId = new Dictionary<int, RectTransform>();
 
+    private void OnEnable()
+    {
+        GameManager.OnGalaxyStateChanged += HandleGalaxyStateChanged;
+    }
+
+    private void OnDisable()
+    {
+        GameManager.OnGalaxyStateChanged -= HandleGalaxyStateChanged;
+    }
+
     private void Start()
     {
         if (mapPanel != null)
@@ -72,6 +83,14 @@ public class GalaxyMapUIManager : MonoBehaviour
         {
             CreateIconsAndLines();
         }
+    }
+
+    private void HandleGalaxyStateChanged()
+    {
+        if (!mapVisible)
+            return;
+
+        CreateIconsAndLines();
     }
 
     private void ClearVisuals()
@@ -175,18 +194,19 @@ public class GalaxyMapUIManager : MonoBehaviour
         for (int i = 0; i < systems.Count; i++)
         {
             var sys = systems[i];
-            if (!sys.discovered) continue;
+            if (!sys.discovered && !showUndiscoveredAsUnknown) continue;
 
             RectTransform rtA;
             if (!iconBySystemId.TryGetValue(sys.id, out rtA))
-                continue; // should not happen if icons were created
+                continue;
 
             foreach (int neighbourId in sys.wormholeLinks)
             {
                 if (neighbourId <= sys.id) continue; // avoid duplicates and self
 
                 var neighbour = galaxy.GetSystem(neighbourId);
-                if (neighbour == null || !neighbour.discovered)
+                if (neighbour == null) continue;
+                if (!neighbour.discovered && !showUndiscoveredAsUnknown)
                     continue;
 
                 RectTransform rtB;
