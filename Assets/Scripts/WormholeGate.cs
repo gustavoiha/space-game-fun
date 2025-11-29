@@ -1,43 +1,52 @@
 using UnityEngine;
-using UnityEngine.InputSystem;
 
 /// <summary>
-/// Represents a wormhole gate in space. When the player is close and presses
-/// the interact key, the gate tells GameManager to jump to its target system.
+/// Represents a wormhole gate in space. Knows which system it leads to and
+/// the distance at which ships can use it. Ship-side logic calls TryActivate(...)
+/// to perform a jump via GameManager.
 /// </summary>
 public class WormholeGate : MonoBehaviour
 {
     [Tooltip("System id this gate leads to (GalaxyGenerator index).")]
     public int targetSystemId = -1;
 
-    [Tooltip("Distance at which the player can activate the gate.")]
+    [Tooltip("Distance at which ships are considered 'in range' to use this gate.")]
     public float activationDistance = 30f;
 
-    [Tooltip("Key used to activate the gate.")]
-    public Key interactKey = Key.F;
+    [Header("UI Prompt")]
+    [Tooltip("World-space Canvas attached to this gate, containing the prompt text.")]
+    public Canvas promptCanvas;
 
-    private Transform player;
-
-    private void Update()
+    private void Awake()
     {
-        if (GameManager.Instance == null || GameManager.Instance.PlayerTransform == null)
-            return;
+        if (promptCanvas != null)
+            promptCanvas.gameObject.SetActive(false);
+    }
 
-        if (targetSystemId < 0)
-            return;
+    /// <summary>
+    /// Called by a ship when it wants to use this gate.
+    /// Returns true if a jump was performed.
+    /// </summary>
+    public bool TryActivate(ShipWormholeNavigator ship)
+    {
+        if (ship == null || targetSystemId < 0 || GameManager.Instance == null)
+            return false;
 
-        if (player == null)
-            player = GameManager.Instance.PlayerTransform;
+        float dist = Vector3.Distance(transform.position, ship.transform.position);
+        if (dist > activationDistance)
+            return false;
 
-        float dist = Vector3.Distance(transform.position, player.position);
-        if (dist <= activationDistance)
-        {
-            Keyboard kb = Keyboard.current;
-            if (kb != null && kb[interactKey].wasPressedThisFrame)
-            {
-                GameManager.Instance.JumpToSystem(targetSystemId);
-            }
-        }
+        GameManager.Instance.JumpShipToSystem(ship, targetSystemId);
+        return true;
+    }
+
+    /// <summary>
+    /// Ship-side logic can ask us to show or hide our prompt.
+    /// </summary>
+    public void SetPromptVisible(bool visible)
+    {
+        if (promptCanvas != null)
+            promptCanvas.gameObject.SetActive(visible);
     }
 
     private void OnDrawGizmosSelected()

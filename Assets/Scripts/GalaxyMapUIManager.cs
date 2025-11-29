@@ -6,7 +6,8 @@ using UnityEngine.InputSystem;
 /// <summary>
 /// Galaxy map UI overlay.
 /// - Reads logical systems from GalaxyGenerator
-/// - Shows only discovered systems
+/// - Shows only discovered systems (unless debug flag is enabled)
+/// - Highlights current system and shows its name
 /// - Toggle with M (new Input System)
 /// </summary>
 public class GalaxyMapUIManager : MonoBehaviour
@@ -21,6 +22,11 @@ public class GalaxyMapUIManager : MonoBehaviour
 
     [Header("Debug")]
     public bool showUndiscoveredAsUnknown = false;
+
+    [Header("Current System UI")]
+    public Text currentSystemLabel;              // optional label at top of map
+    public Color currentSystemHighlightColor = Color.white;
+    public float currentSystemIconScale = 1.4f;
 
     private bool mapVisible = false;
     private readonly List<GameObject> iconInstances = new List<GameObject>();
@@ -60,6 +66,7 @@ public class GalaxyMapUIManager : MonoBehaviour
         if (galaxy == null || mapPanel == null || iconPrefab == null)
             return;
 
+        // Clear old icons
         foreach (var icon in iconInstances)
         {
             if (icon != null) Destroy(icon);
@@ -70,6 +77,10 @@ public class GalaxyMapUIManager : MonoBehaviour
         if (systems == null || systems.Count == 0) return;
 
         float halfSize = galaxy.galaxySize * 0.5f;
+
+        int currentId = -1;
+        if (GameManager.Instance != null)
+            currentId = GameManager.Instance.currentSystemId;
 
         foreach (var sys in systems)
         {
@@ -89,10 +100,35 @@ public class GalaxyMapUIManager : MonoBehaviour
             var img = iconGO.GetComponent<Image>();
             if (img != null)
             {
-                img.color = GetFactionColor(sys.faction);
+                Color baseColor = GetFactionColor(sys.faction);
+
+                if (sys.id == currentId)
+                {
+                    baseColor = currentSystemHighlightColor;
+                    rt.sizeDelta = rt.sizeDelta * currentSystemIconScale;
+                }
+
+                img.color = baseColor;
             }
 
             iconInstances.Add(iconGO);
+        }
+
+        // Update label
+        if (currentSystemLabel != null)
+        {
+            if (currentId >= 0)
+            {
+                var curSys = galaxy.GetSystem(currentId);
+                if (curSys != null)
+                    currentSystemLabel.text = $"Current System: {curSys.displayName}";
+                else
+                    currentSystemLabel.text = "Current System: Unknown";
+            }
+            else
+            {
+                currentSystemLabel.text = "Current System: Unknown";
+            }
         }
     }
 

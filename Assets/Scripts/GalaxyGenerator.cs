@@ -63,7 +63,7 @@ public class GalaxyGenerator : MonoBehaviour
     public int randomSeed = 0;
 
     [Tooltip("If true, all systems start as discovered (debug).")]
-    public bool revealAllAtStart = true;
+    public bool revealAllAtStart = false;
 
     private readonly List<StarSystemData> systems = new List<StarSystemData>();
     public IReadOnlyList<StarSystemData> Systems => systems;
@@ -105,7 +105,7 @@ public class GalaxyGenerator : MonoBehaviour
             role = SystemRole.Start,
             faction = Faction.HorizonInitiative,
             position = new Vector3(-150f, 0f, 80f),
-            discovered = true,
+            discovered = true,   // visible at start
             visited = false
         });
 
@@ -127,7 +127,7 @@ public class GalaxyGenerator : MonoBehaviour
                 role = SystemRole.Normal,
                 faction = Faction.None,
                 position = pos,
-                discovered = false,
+                discovered = false,   // hidden until discovered
                 visited = false
             };
 
@@ -178,7 +178,7 @@ public class GalaxyGenerator : MonoBehaviour
             }
         }
 
-        // Discovery defaults
+        // Optional debug: reveal everything.
         if (revealAllAtStart)
         {
             foreach (var sys in systems)

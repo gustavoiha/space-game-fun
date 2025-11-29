@@ -29,7 +29,7 @@ public class GameManager : MonoBehaviour
     public int currentSystemId = -1;
 
     private GameObject playerInstance;
-    private readonly List<GameObject> activeGates = new List<GameObject>();
+    private readonly List<WormholeGate> activeGates = new List<WormholeGate>();
 
     public Transform PlayerTransform => playerInstance != null ? playerInstance.transform : null;
 
@@ -125,10 +125,9 @@ public class GameManager : MonoBehaviour
 
             float angleDeg = (360f / linkCount) * i;
             float angleRad = angleDeg * Mathf.Deg2Rad;
-
             Vector3 offset = new Vector3(Mathf.Cos(angleRad), 0f, Mathf.Sin(angleRad)) * gateRingRadius;
-            Vector3 gatePos = sys.position + offset;
 
+            Vector3 gatePos = sys.position + offset;
             Quaternion rot = Quaternion.LookRotation(sys.position - gatePos, Vector3.up);
 
             GameObject gateObj = Instantiate(wormholeGatePrefab, gatePos, rot);
@@ -136,36 +135,79 @@ public class GameManager : MonoBehaviour
             if (gate != null)
             {
                 gate.targetSystemId = targetId;
+                activeGates.Add(gate);
             }
-
-            activeGates.Add(gateObj);
         }
     }
 
     private void ClearWormholeGates()
     {
-        foreach (var go in activeGates)
+        foreach (var gate in activeGates)
         {
-            if (go != null)
-                Destroy(go);
+            if (gate != null)
+                Destroy(gate.gameObject);
         }
         activeGates.Clear();
     }
 
     /// <summary>
-    /// Called by WormholeGate when the player activates a gate.
+    /// Returns the nearest active gate to the given position, within maxDistance.
+    /// Returns null if none are in range.
     /// </summary>
-    public void JumpToSystem(int targetSystemId)
+    public WormholeGate FindNearestGate(Vector3 position, float maxDistance)
     {
+        WormholeGate best = null;
+        float maxSqr = maxDistance * maxDistance;
+
+        foreach (var gate in activeGates)
+        {
+            if (gate == null) continue;
+
+            float sqr = (gate.transform.position - position).sqrMagnitude;
+            if (sqr <= maxSqr)
+            {
+                maxSqr = sqr;
+                best = gate;
+            }
+        }
+
+        return best;
+    }
+
+    /// <summary>
+    /// Performs a jump for a given ship to a target system.
+    /// Player ships also update currentSystemId, discovery, and gates.
+    /// </summary>
+    public void JumpShipToSystem(ShipWormholeNavigator ship, int targetSystemId)
+    {
+        if (ship == null || galaxy == null)
+            return;
+
         var targetSys = galaxy.GetSystem(targetSystemId);
-        if (targetSys == null) return;
+        if (targetSys == null)
+            return;
 
-        currentSystemId = targetSystemId;
+        if (ship.isPlayerControlled)
+        {
+            currentSystemId = targetSystemId;
 
-        galaxy.DiscoverSystem(targetSystemId);
-        targetSys.visited = true;
+            galaxy.DiscoverSystem(targetSystemId);
+            targetSys.visited = true;
 
-        SpawnPlayerAtSystem(currentSystemId);
-        SpawnWormholeGates();
+            SpawnPlayerAtSystem(currentSystemId);
+            SpawnWormholeGates();
+        }
+        else
+        {
+            // NPC: just move this ship to the new system's space.
+            Vector3 dir = Random.onUnitSphere;
+            dir.y = 0f;
+            if (dir.sqrMagnitude < 0.0001f) dir = Vector3.forward;
+            dir.Normalize();
+
+            Vector3 spawnPos = targetSys.position + dir * startDistanceFromStar;
+            ship.transform.position = spawnPos;
+            ship.transform.LookAt(targetSys.position);
+        }
     }
 }
