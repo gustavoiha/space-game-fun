@@ -13,16 +13,6 @@ public class WormholeGate : MonoBehaviour
     [Tooltip("Distance at which ships are considered 'in range' to use this gate.")]
     public float activationDistance = 30f;
 
-    [Header("UI Prompt")]
-    [Tooltip("World-space Canvas attached to this gate, containing the prompt text.")]
-    public Canvas promptCanvas;
-
-    private void Awake()
-    {
-        if (promptCanvas != null)
-            promptCanvas.gameObject.SetActive(false);
-    }
-
     /// <summary>
     /// Called by a ship when it wants to use this gate.
     /// Returns true if a jump was performed.
@@ -38,15 +28,6 @@ public class WormholeGate : MonoBehaviour
 
         GameManager.Instance.JumpShipToSystem(ship, targetSystemId);
         return true;
-    }
-
-    /// <summary>
-    /// Ship-side logic can ask us to show or hide our prompt.
-    /// </summary>
-    public void SetPromptVisible(bool visible)
-    {
-        if (promptCanvas != null)
-            promptCanvas.gameObject.SetActive(visible);
     }
 
     private void OnDrawGizmosSelected()

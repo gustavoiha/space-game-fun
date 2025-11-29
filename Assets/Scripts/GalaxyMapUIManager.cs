@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.InputSystem;
+using TMPro;
 
 /// <summary>
 /// Galaxy map UI overlay.
@@ -24,7 +25,7 @@ public class GalaxyMapUIManager : MonoBehaviour
     public bool showUndiscoveredAsUnknown = false;
 
     [Header("Current System UI")]
-    public Text currentSystemLabel;              // optional label at top of map
+    public TextMeshProUGUI currentSystemLabel;   // TextMeshPro instead of UI.Text
     public Color currentSystemHighlightColor = Color.white;
     public float currentSystemIconScale = 1.4f;
 
