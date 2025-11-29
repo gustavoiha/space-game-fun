@@ -23,7 +23,6 @@ public class GalaxyMapUIManager : MonoBehaviour
     public bool showUndiscoveredAsUnknown = false;
 
     private bool mapVisible = false;
-    private bool iconsCreated = false;
     private readonly List<GameObject> iconInstances = new List<GameObject>();
 
     private void Start()
@@ -50,10 +49,9 @@ public class GalaxyMapUIManager : MonoBehaviour
         if (mapPanel != null)
             mapPanel.gameObject.SetActive(mapVisible);
 
-        if (mapVisible && !iconsCreated)
+        if (mapVisible)
         {
             CreateIcons();
-            iconsCreated = true;
         }
     }
 
