@@ -283,8 +283,20 @@ public class ShipWormholeNavigator : MonoBehaviour
         }
 
         int wormholeId = activeGateForJump.WormholeId;
+        int originSystemId = -1;
 
         var gm = GameManager.Instance;
+        var discovery = GameDiscoveryState.Instance;
+
+        if (gm != null)
+        {
+            originSystemId = gm.CurrentSystemId;
+        }
+        else if (discovery != null)
+        {
+            originSystemId = discovery.CurrentSystemId;
+        }
+
         if (gm != null)
         {
             if (wormholeId >= 0)
@@ -299,11 +311,55 @@ public class ShipWormholeNavigator : MonoBehaviour
             gm.SetCurrentSystem(targetSystemId);
         }
 
-        var exit = activeGateForJump.ExitPoint;
+        WormholeGate destinationGate = null;
+
+        if (gm != null)
+        {
+            if (wormholeId >= 0)
+            {
+                gm.TryGetActiveGateForWormhole(wormholeId, out destinationGate);
+            }
+
+            if (destinationGate == null && originSystemId >= 0)
+            {
+                gm.TryGetActiveGateForTargetSystem(originSystemId, out destinationGate);
+            }
+        }
+
+        Vector3 targetPosition = transform.position;
+        Quaternion targetRotation = transform.rotation;
+
+        Transform exit = destinationGate != null ? destinationGate.ExitPoint : null;
+
         if (exit != null)
         {
-            transform.position = exit.position;
-            transform.rotation = exit.rotation;
+            targetPosition = exit.position;
+            targetRotation = exit.rotation;
+        }
+        else if (destinationGate != null)
+        {
+            targetPosition = destinationGate.transform.position + destinationGate.transform.forward * 5f;
+            targetRotation = destinationGate.transform.rotation;
+        }
+        else if (activeGateForJump.ExitPoint != null)
+        {
+            targetPosition = activeGateForJump.ExitPoint.position;
+            targetRotation = activeGateForJump.ExitPoint.rotation;
+        }
+        else
+        {
+            targetPosition = activeGateForJump.transform.position;
+            targetRotation = activeGateForJump.transform.rotation;
+        }
+
+        transform.position = targetPosition;
+        transform.rotation = targetRotation;
+
+        var rb = GetComponent<Rigidbody>();
+        if (rb != null)
+        {
+            rb.velocity = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
         }
 
         HidePrompt();

@@ -40,6 +40,9 @@ public class GameManager : MonoBehaviour
     [Tooltip("Optional parent transform for spawned wormhole gates.")]
     [SerializeField] private Transform wormholeGatesParent;
 
+    [Tooltip("Scale factor applied when mapping 2D galaxy coordinates into 3D world space (x, z).")]
+    [SerializeField] private float systemPositionScale = 1f;
+
     [Tooltip("Radius around the origin at which to place wormhole gates for the current system.")]
     [SerializeField] private float gateRingRadius = 50f;
 
@@ -49,8 +52,12 @@ public class GameManager : MonoBehaviour
     private GameObject playerShipInstance;
     private readonly List<WormholeGate> activeGates = new List<WormholeGate>();
 
+    private bool hasAlignedInitialShipPosition;
+    private Vector3 currentSystemWorldPosition = Vector3.zero;
+
     public int CurrentSystemId => discoveryState != null ? discoveryState.CurrentSystemId : -1;
     public GameObject PlayerShip => playerShipInstance;
+    public Vector3 CurrentSystemWorldPosition => currentSystemWorldPosition;
 
     private void Awake()
     {
@@ -148,6 +155,12 @@ public class GameManager : MonoBehaviour
     {
         UpdateCurrentSystemLabel(systemId);
         BuildWormholeGatesForSystem(systemId);
+
+        if (!hasAlignedInitialShipPosition && playerShipInstance != null && systemId >= 0)
+        {
+            playerShipInstance.transform.position = GetSystemWorldPosition(systemId);
+            hasAlignedInitialShipPosition = true;
+        }
     }
 
     private void UpdateCurrentSystemLabel(int systemId)
@@ -202,7 +215,9 @@ public class GameManager : MonoBehaviour
         if (wormholeGatePrefab == null)
             return;
 
-        Vector3 center = gateRingCenter != null ? gateRingCenter.position : Vector3.zero;
+        currentSystemWorldPosition = GetSystemWorldPosition(systemId);
+
+        Vector3 center = currentSystemWorldPosition;
         int count = neighbors.Count;
         float angleStep = 360f / Mathf.Max(1, count);
 
@@ -213,13 +228,38 @@ public class GameManager : MonoBehaviour
             // Find the wormhole that connects systemId <-> neighborId
             int wormholeId = FindWormholeIdBetween(systemId, neighborId);
 
-            float angleDeg = i * angleStep;
-            float angleRad = angleDeg * Mathf.Deg2Rad;
+            Vector3 gatePos;
+            Quaternion gateRot;
 
-            Vector3 offset = new Vector3(Mathf.Cos(angleRad), 0f, Mathf.Sin(angleRad)) * gateRingRadius;
-            Vector3 gatePos = center + offset;
+            if (TryGetSystemWorldPosition(neighborId, out var neighborPos))
+            {
+                Vector3 dir = neighborPos - center;
+                dir.y = 0f;
 
-            Quaternion gateRot = Quaternion.LookRotation((center - gatePos).normalized, Vector3.up);
+                if (dir.sqrMagnitude > 0.001f)
+                {
+                    dir.Normalize();
+                    gatePos = center + dir * gateRingRadius;
+                    gateRot = Quaternion.LookRotation((center - gatePos).normalized, Vector3.up);
+                }
+                else
+                {
+                    // Neighbor sits on top of us; fall back to even spacing.
+                    float angleDeg = i * angleStep;
+                    float angleRad = angleDeg * Mathf.Deg2Rad;
+                    Vector3 offset = new Vector3(Mathf.Cos(angleRad), 0f, Mathf.Sin(angleRad)) * gateRingRadius;
+                    gatePos = center + offset;
+                    gateRot = Quaternion.LookRotation((center - gatePos).normalized, Vector3.up);
+                }
+            }
+            else
+            {
+                float angleDeg = i * angleStep;
+                float angleRad = angleDeg * Mathf.Deg2Rad;
+                Vector3 offset = new Vector3(Mathf.Cos(angleRad), 0f, Mathf.Sin(angleRad)) * gateRingRadius;
+                gatePos = center + offset;
+                gateRot = Quaternion.LookRotation((center - gatePos).normalized, Vector3.up);
+            }
 
             WormholeGate gateInstance = Instantiate(wormholeGatePrefab, gatePos, gateRot, wormholeGatesParent);
             gateInstance.SetWormholeId(wormholeId);
@@ -248,6 +288,66 @@ public class GameManager : MonoBehaviour
         }
 
         return -1;
+    }
+
+    /// <summary>
+    /// Convert a generated 2D galaxy position into world space (x -> x, y -> z).
+    /// Falls back to the gate ring center or Vector3.zero if the system cannot be resolved.
+    /// </summary>
+    public Vector3 GetSystemWorldPosition(int systemId)
+    {
+        if (TryGetSystemWorldPosition(systemId, out var pos))
+            return pos;
+
+        if (gateRingCenter != null)
+            return gateRingCenter.position;
+
+        return Vector3.zero;
+    }
+
+    private bool TryGetSystemWorldPosition(int systemId, out Vector3 worldPos)
+    {
+        worldPos = Vector3.zero;
+
+        if (galaxy != null && galaxy.TryGetSystem(systemId, out var node))
+        {
+            worldPos = new Vector3(node.position.x * systemPositionScale, 0f, node.position.y * systemPositionScale);
+            return true;
+        }
+
+        return false;
+    }
+
+    public bool TryGetActiveGateForWormhole(int wormholeId, out WormholeGate gate)
+    {
+        for (int i = 0; i < activeGates.Count; i++)
+        {
+            var candidate = activeGates[i];
+            if (candidate != null && candidate.WormholeId == wormholeId)
+            {
+                gate = candidate;
+                return true;
+            }
+        }
+
+        gate = null;
+        return false;
+    }
+
+    public bool TryGetActiveGateForTargetSystem(int targetSystemId, out WormholeGate gate)
+    {
+        for (int i = 0; i < activeGates.Count; i++)
+        {
+            var candidate = activeGates[i];
+            if (candidate != null && candidate.ExplicitTargetSystemId == targetSystemId)
+            {
+                gate = candidate;
+                return true;
+            }
+        }
+
+        gate = null;
+        return false;
     }
 
     #region Public helpers for other scripts

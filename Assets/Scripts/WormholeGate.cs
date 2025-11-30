@@ -34,6 +34,7 @@ public class WormholeGate : MonoBehaviour
     /// Public accessors used by ShipWormholeNavigator and other systems.
     /// </summary>
     public int WormholeId => wormholeId;
+    public int ExplicitTargetSystemId => explicitTargetSystemId;
     public Transform ExitPoint => exitPoint;
 
     private void Awake()
