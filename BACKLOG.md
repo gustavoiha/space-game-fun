@@ -127,7 +127,7 @@ Each task has an ID (e.g. `M1.1`) so tools and humans can reference them unambig
     - The current system changes.
   - Drive these updates via `GalaxyState` events from `M0.5`.
 
-- **M2.4 - Zooming on map**
+- **M2.4 - Zooming on map (implemented)**
   - Pivot center of zooming on the map should be the mouse pointer.
 
 ### M2 – Interaction

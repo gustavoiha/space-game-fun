@@ -412,7 +412,23 @@ public class GalaxyMapUIManager : MonoBehaviour
         if (Mathf.Approximately(scroll, 0f))
             return;
 
-        ApplyZoom(currentZoom + scroll * zoomSpeed * 0.01f);
+        float targetZoom = Mathf.Clamp(currentZoom + scroll * zoomSpeed * 0.01f, minZoom, maxZoom);
+
+        RectTransform parentRect = mapContentRect != null ? mapContentRect.parent as RectTransform : null;
+        Vector2 pointerLocal = Vector2.zero;
+        bool hasPointer = parentRect != null &&
+                          RectTransformUtility.ScreenPointToLocalPointInRectangle(parentRect, mouse.position.ReadValue(), null, out pointerLocal);
+
+        if (mapContentRect != null && hasPointer)
+        {
+            Vector2 offsetBeforeZoom = (pointerLocal - mapContentRect.anchoredPosition) / currentZoom;
+            ApplyZoom(targetZoom);
+            mapContentRect.anchoredPosition = pointerLocal - offsetBeforeZoom * currentZoom;
+        }
+        else
+        {
+            ApplyZoom(targetZoom);
+        }
 
         if (clampPanning)
             ClampPanToBounds();
