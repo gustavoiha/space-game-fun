@@ -58,6 +58,7 @@ public class GameManager : MonoBehaviour
     public int CurrentSystemId => discoveryState != null ? discoveryState.CurrentSystemId : -1;
     public GameObject PlayerShip => playerShipInstance;
     public Vector3 CurrentSystemWorldPosition => currentSystemWorldPosition;
+    public float GateRingRadius => gateRingRadius;
 
     private void Awake()
     {

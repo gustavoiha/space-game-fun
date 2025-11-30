@@ -273,6 +273,10 @@ Assets/
   - Displays current and discovered systems, plus “frontier” unknown systems that are adjacent to discovered ones.
   - Draws wormhole connections between discovered systems.
   - Highlights the current system.
+- Presents a **local star-system view** inside the map UI:
+  - Shows a boundary circle, a star icon at the center, and wormhole entry icons positioned relative to neighboring system direc
+tions.
+  - Shows a player-ship icon when the selected system is the active one and the ship is spawned.
 - Handles zooming/panning and recenters on the current system when opened.
 
 ### Core Behaviour
@@ -288,6 +292,11 @@ Assets/
 - **Rendering Wormholes**
   - Draws UI lines between system icons.
   - Enables a line when the wormhole is discovered **and** both endpoints are visible on the map (discovered systems or frontier systems adjacent to a discovered system).
+- **Star System Map**
+  - Always opens in the system view by default and builds the star layout for the active system.
+  - Renders wormhole icons around the system boundary using the direction to neighboring systems (with IDs pulled from `GalaxyGenerator`).
+  - Shows a ship icon positioned relative to the system center when the active system matches `GameDiscoveryState.currentSystemId` and a player ship exists in the scene.
+  - Switches between system view and galaxy view when zoom passes configurable thresholds or when a user clicks on a system icon in the galaxy view.
 
 - **Current System Highlight**
   - Highlights the icon of `GameDiscoveryState.currentSystemId`.

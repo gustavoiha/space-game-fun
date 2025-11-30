@@ -9,13 +9,20 @@ using UnityEngine.InputSystem;   // New Input System
 /// </summary>
 public class GalaxyMapUIManager : MonoBehaviour
 {
+    private enum MapMode
+    {
+        System,
+        Galaxy
+    }
     public static GalaxyMapUIManager Instance { get; private set; }
 
     [Header("References")]
     [SerializeField] private GalaxyGenerator galaxy;
 
-    [Tooltip("Root GameObject of the map UI (panel/canvas). This will be enabled/disabled when opening/closing the map.")]
-    [SerializeField] private GameObject mapRoot;
+    [Tooltip("Root MapCanvas GameObject that contains the galaxy and system map canvases.")]
+    [SerializeField] private GameObject mapCanvasRoot;
+
+    [SerializeField] private GameObject galaxyMapRoot;
 
     [SerializeField] private RectTransform mapContentRect;
 
@@ -24,6 +31,24 @@ public class GalaxyMapUIManager : MonoBehaviour
 
     [Tooltip("Prefab or component used to draw wormhole lines (e.g. an Image-based line).")]
     [SerializeField] private Image wormholeLinePrefab;
+
+    [Header("System Map")]
+    [Tooltip("Root container for the system map mode.")]
+    [SerializeField] private GameObject systemMapRoot;
+
+    [SerializeField] private RectTransform systemMapContentRect;
+
+    [Tooltip("Circle element that defines the boundary of the star system view.")]
+    [SerializeField] private RectTransform systemBoundaryCircle;
+
+    [Tooltip("Prefab used to render the star at the center of a system map.")]
+    [SerializeField] private RectTransform systemStarIconPrefab;
+
+    [Tooltip("Prefab used to render wormhole entry points in a system map.")]
+    [SerializeField] private RectTransform systemWormholeIconPrefab;
+
+    [Tooltip("Prefab used to render the player's ship in a system map.")]
+    [SerializeField] private RectTransform playerShipIconPrefab;
 
     [Header("Visuals")]
     [Tooltip("Color for undiscovered frontier systems (neighbors of discovered systems).")]
@@ -37,6 +62,10 @@ public class GalaxyMapUIManager : MonoBehaviour
     [Tooltip("If true, the map recenters on the current system when opened.")]
     [SerializeField] private bool focusOnCurrentSystemOnOpen = true;
 
+    [Header("System Map Transition")]
+    [Tooltip("Zoom level at which the map should be considered in system view.")]
+    [SerializeField] private float systemMapZoomThreshold = 2f;
+
     [Header("Pan & Zoom")]
     [SerializeField] private float minZoom = 0.5f;
     [SerializeField] private float maxZoom = 3f;
@@ -44,6 +73,16 @@ public class GalaxyMapUIManager : MonoBehaviour
     [SerializeField] private float keyboardPanSpeed = 400f;
     [SerializeField] private float dragPanSpeed = 1f;
     [SerializeField] private bool clampPanning = true;
+
+    [Header("Mode Switching")]
+    [Tooltip("Zoom threshold below which the map switches from system view to galaxy view when zooming out.")]
+    [SerializeField] private float systemToGalaxyZoomThreshold = 0.7f;
+
+    [Tooltip("Zoom threshold above which the map switches from galaxy view to system view when zooming in.")]
+    [SerializeField] private float galaxyToSystemZoomThreshold = 1.05f;
+
+    [Tooltip("Approximate world-space radius represented by the system map circle.")]
+    [SerializeField] private float systemMapWorldRadius = 60f;
 
     [Header("Map Toggle (New Input System)")]
     [Tooltip("Input action used to toggle the map (bind this to the M key in your Input Actions asset).")]
@@ -66,7 +105,15 @@ public class GalaxyMapUIManager : MonoBehaviour
     private bool isDragging;
     private Vector2 lastMousePosition;
 
+    private MapMode currentMode = MapMode.System;
+    private int activeSystemMapSystemId = -1;
+    private RectTransform systemStarIconInstance;
+    private RectTransform playerShipIconInstance;
+    private readonly Dictionary<int, RectTransform> systemWormholeIconsById = new Dictionary<int, RectTransform>();
+
     private GameDiscoveryState discovery;
+
+    private RectTransform ActiveContentRect => currentMode == MapMode.Galaxy ? mapContentRect : systemMapContentRect;
 
     private void Awake()
     {
@@ -78,20 +125,32 @@ public class GalaxyMapUIManager : MonoBehaviour
 
         Instance = this;
 
-        // Default mapRoot to this object or the rect's root if not assigned
-        if (mapRoot == null)
+        // Default mapCanvasRoot to the outermost canvas that contains the map content
+        if (mapCanvasRoot == null)
         {
-            if (mapContentRect != null)
-                mapRoot = mapContentRect.root.gameObject;
-            else
-                mapRoot = gameObject;
+            mapCanvasRoot = FindMapCanvasRoot();
+
+            if (mapCanvasRoot == null)
+                mapCanvasRoot = gameObject;
+        }
+
+        if (galaxyMapRoot == null)
+        {
+            galaxyMapRoot = mapContentRect != null ? mapContentRect.gameObject : mapRoot;
+        }
+
+        if (systemMapRoot == null && systemMapContentRect != null)
+        {
+            systemMapRoot = systemMapContentRect.gameObject;
         }
 
         isOpen = openOnStart;
-        if (mapRoot != null)
+        if (mapCanvasRoot != null)
         {
-            mapRoot.SetActive(isOpen);
+            mapCanvasRoot.SetActive(isOpen);
         }
+
+        SetMode(MapMode.System, true);
     }
 
     private void OnEnable()
@@ -152,16 +211,31 @@ public class GalaxyMapUIManager : MonoBehaviour
     /// </summary>
     public void ToggleMap()
     {
-        if (mapRoot == null)
+        if (mapCanvasRoot == null)
             return;
 
         isOpen = !isOpen;
-        mapRoot.SetActive(isOpen);
+        mapCanvasRoot.SetActive(isOpen);
+
+        // Ensure the correct map sub-root is shown or hidden when toggling.
+        SetMode(currentMode);
 
         if (isOpen)
         {
             BuildMap();
         }
+    }
+
+    private GameObject FindMapCanvasRoot()
+    {
+        if (mapContentRect == null)
+            return null;
+
+        var parentCanvases = mapContentRect.GetComponentsInParent<Canvas>(true);
+        if (parentCanvases == null || parentCanvases.Length == 0)
+            return null;
+
+        return parentCanvases[parentCanvases.Length - 1].gameObject;
     }
 
     /// <summary>
@@ -183,11 +257,12 @@ public class GalaxyMapUIManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Rebuilds all system icons and wormhole lines from the current galaxy data.
+    /// Rebuilds both the galaxy view and the currently focused system map.
     /// </summary>
     public void BuildMap()
     {
-        ClearMap();
+        ClearGalaxyMap();
+        ClearSystemMap();
 
         if (mapContentRect != null)
         {
@@ -201,11 +276,15 @@ public class GalaxyMapUIManager : MonoBehaviour
         CreateSystemIcons();
         CreateWormholeLines();
 
+        activeSystemMapSystemId = discovery != null ? discovery.CurrentSystemId : 0;
+        BuildSystemMap(activeSystemMapSystemId);
+
         ResetViewToCurrentSystem();
         RefreshVisuals();
+        SetMode(MapMode.System, true);
     }
 
-    private void ClearMap()
+    private void ClearGalaxyMap()
     {
         foreach (var icon in systemIconsById.Values)
         {
@@ -223,6 +302,31 @@ public class GalaxyMapUIManager : MonoBehaviour
 
         wormholeLines.Clear();
         wormholeLinesById.Clear();
+    }
+
+    private void ClearSystemMap()
+    {
+        foreach (var kvp in systemWormholeIconsById)
+        {
+            if (kvp.Value != null)
+            {
+                Destroy(kvp.Value.gameObject);
+            }
+        }
+
+        systemWormholeIconsById.Clear();
+
+        if (systemStarIconInstance != null)
+        {
+            Destroy(systemStarIconInstance.gameObject);
+            systemStarIconInstance = null;
+        }
+
+        if (playerShipIconInstance != null)
+        {
+            Destroy(playerShipIconInstance.gameObject);
+            playerShipIconInstance = null;
+        }
     }
 
     private void ComputeGalaxyBounds()
@@ -256,8 +360,25 @@ public class GalaxyMapUIManager : MonoBehaviour
             icon.anchoredPosition = GalaxyToMapPosition(system.position);
             icon.name = $"SystemIcon_{system.id}";
 
+            var button = icon.GetComponent<Button>();
+            if (button != null)
+            {
+                int capturedId = system.id;
+                button.onClick.AddListener(() => OnSystemIconClicked(capturedId));
+            }
+
             systemIconsById[system.id] = icon;
         }
+    }
+
+    private void OnSystemIconClicked(int systemId)
+    {
+        ShowSystemMapForSystem(systemId);
+        FocusOnSystem(systemId);
+        ApplyZoom(systemMapZoomThreshold);
+
+        if (clampPanning)
+            ClampPanToBounds();
     }
 
     private void CreateWormholeLines()
@@ -333,16 +454,27 @@ public class GalaxyMapUIManager : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Opens the system map focused on the specified system ID.
+    /// </summary>
+    public void ShowSystemMapForSystem(int systemId)
+    {
+        BuildSystemMap(systemId);
+        SetMode(MapMode.System, true);
+    }
+
     private void RefreshVisuals()
     {
         RefreshSystemVisuals();
         RefreshWormholeVisuals();
+        RefreshSystemMapVisuals();
     }
 
     private void HandleDiscoveryChanged()
     {
         if (isOpen)
         {
+            BuildSystemMap(activeSystemMapSystemId);
             RefreshVisuals();
         }
     }
@@ -351,39 +483,59 @@ public class GalaxyMapUIManager : MonoBehaviour
     {
         if (isOpen)
         {
+            BuildSystemMap(systemId);
             RefreshVisuals();
         }
     }
 
     private void Update()
     {
-        if (!isOpen || mapContentRect == null)
+        if (!isOpen || ActiveContentRect == null)
             return;
 
         HandleZoomInput();
         HandlePanInput();
+
+        if (currentMode == MapMode.System)
+        {
+            UpdateSystemMapDynamicElements();
+        }
     }
 
     private void ResetViewToCurrentSystem()
     {
-        if (mapContentRect == null)
-            return;
-
         ApplyZoom(initialZoom);
 
-        if (focusOnCurrentSystemOnOpen && discovery != null)
+        if (currentMode == MapMode.Galaxy)
         {
-            FocusOnSystem(discovery.CurrentSystemId);
-        }
+            if (focusOnCurrentSystemOnOpen && discovery != null)
+            {
+                FocusOnSystem(discovery.CurrentSystemId);
+            }
 
-        if (clampPanning)
-            ClampPanToBounds();
+            if (clampPanning)
+                ClampPanToBounds();
+        }
+        else
+        {
+            if (focusOnCurrentSystemOnOpen && discovery != null)
+            {
+                BuildSystemMap(discovery.CurrentSystemId);
+            }
+
+            if (systemMapContentRect != null)
+                systemMapContentRect.anchoredPosition = Vector2.zero;
+        }
     }
 
     private void ApplyZoom(float targetZoom)
     {
         currentZoom = Mathf.Clamp(targetZoom, minZoom, maxZoom);
-        mapContentRect.localScale = Vector3.one * currentZoom;
+        if (mapContentRect != null)
+            mapContentRect.localScale = Vector3.one * currentZoom;
+
+        if (systemMapContentRect != null)
+            systemMapContentRect.localScale = Vector3.one * currentZoom;
     }
 
     private void FocusOnSystem(int systemId)
@@ -414,16 +566,17 @@ public class GalaxyMapUIManager : MonoBehaviour
 
         float targetZoom = Mathf.Clamp(currentZoom + scroll * zoomSpeed * 0.01f, minZoom, maxZoom);
 
-        RectTransform parentRect = mapContentRect != null ? mapContentRect.parent as RectTransform : null;
+        RectTransform contentRect = ActiveContentRect;
+        RectTransform parentRect = contentRect != null ? contentRect.parent as RectTransform : null;
         Vector2 pointerLocal = Vector2.zero;
         bool hasPointer = parentRect != null &&
                           RectTransformUtility.ScreenPointToLocalPointInRectangle(parentRect, mouse.position.ReadValue(), null, out pointerLocal);
 
-        if (mapContentRect != null && hasPointer)
+        if (contentRect != null && hasPointer)
         {
-            Vector2 offsetBeforeZoom = (pointerLocal - mapContentRect.anchoredPosition) / currentZoom;
+            Vector2 offsetBeforeZoom = (pointerLocal - contentRect.anchoredPosition) / currentZoom;
             ApplyZoom(targetZoom);
-            mapContentRect.anchoredPosition = pointerLocal - offsetBeforeZoom * currentZoom;
+            contentRect.anchoredPosition = pointerLocal - offsetBeforeZoom * currentZoom;
         }
         else
         {
@@ -432,10 +585,15 @@ public class GalaxyMapUIManager : MonoBehaviour
 
         if (clampPanning)
             ClampPanToBounds();
+
+        EvaluateZoomModeSwitch();
     }
 
     private void HandlePanInput()
     {
+        if (currentMode != MapMode.Galaxy)
+            return;
+
         Vector2 delta = Vector2.zero;
         var keyboard = Keyboard.current;
 
@@ -486,6 +644,22 @@ public class GalaxyMapUIManager : MonoBehaviour
         }
     }
 
+    private void EvaluateZoomModeSwitch()
+    {
+        if (currentMode == MapMode.System && currentZoom <= systemToGalaxyZoomThreshold)
+        {
+            SetMode(MapMode.Galaxy, true);
+            FocusOnSystem(activeSystemMapSystemId);
+            if (clampPanning)
+                ClampPanToBounds();
+        }
+        else if (currentMode == MapMode.Galaxy && currentZoom >= galaxyToSystemZoomThreshold)
+        {
+            BuildSystemMap(activeSystemMapSystemId);
+            SetMode(MapMode.System, true);
+        }
+    }
+
     private void RefreshSystemVisuals()
     {
         foreach (var kvp in systemIconsById)
@@ -528,6 +702,67 @@ public class GalaxyMapUIManager : MonoBehaviour
             {
                 image.color = undiscoveredColor;
             }
+        }
+    }
+
+    private void RefreshSystemMapVisuals()
+    {
+        if (systemStarIconInstance != null)
+        {
+            var image = systemStarIconInstance.GetComponent<Image>();
+            if (image != null)
+            {
+                bool isCurrent = discovery != null && discovery.CurrentSystemId == activeSystemMapSystemId;
+                bool isDiscovered = discovery == null || discovery.IsSystemDiscovered(activeSystemMapSystemId);
+                image.color = isCurrent ? currentSystemColor : (isDiscovered ? discoveredColor : undiscoveredColor);
+            }
+        }
+
+        foreach (var kvp in systemWormholeIconsById)
+        {
+            int wormholeId = kvp.Key;
+            RectTransform icon = kvp.Value;
+            if (icon == null)
+                continue;
+
+            if (discovery == null || galaxy == null || !galaxy.WormholesById.TryGetValue(wormholeId, out var link))
+            {
+                icon.gameObject.SetActive(true);
+                continue;
+            }
+
+            bool wormholeKnown = discovery.IsWormholeDiscovered(wormholeId);
+            bool endpointsVisible = ShouldShowSystemOnMap(link.fromSystemId) && ShouldShowSystemOnMap(link.toSystemId);
+            icon.gameObject.SetActive(wormholeKnown || endpointsVisible);
+        }
+    }
+
+    private void SetMode(MapMode mode, bool forceRebuild = false)
+    {
+        bool showRoots = isOpen;
+
+        if (galaxyMapRoot != null)
+            galaxyMapRoot.SetActive(showRoots && mode == MapMode.Galaxy);
+
+        if (systemMapRoot != null)
+            systemMapRoot.SetActive(showRoots && mode == MapMode.System);
+
+        if (!forceRebuild && currentMode == mode)
+            return;
+
+        currentMode = mode;
+
+        ApplyZoom(currentZoom);
+
+        if (mode == MapMode.Galaxy)
+        {
+            FocusOnSystem(activeSystemMapSystemId);
+            if (clampPanning)
+                ClampPanToBounds();
+        }
+        else if (forceRebuild)
+        {
+            BuildSystemMap(activeSystemMapSystemId);
         }
     }
 
@@ -583,9 +818,157 @@ public class GalaxyMapUIManager : MonoBehaviour
         return false;
     }
 
+    private void BuildSystemMap(int systemId)
+    {
+        ClearSystemMap();
+        activeSystemMapSystemId = systemId;
+
+        if (systemMapContentRect == null || galaxy == null || systemId < 0)
+            return;
+
+        if (!galaxy.SystemsById.TryGetValue(systemId, out var system))
+            return;
+
+        if (systemStarIconPrefab != null)
+        {
+            systemStarIconInstance = Instantiate(systemStarIconPrefab, systemMapContentRect);
+            systemStarIconInstance.anchoredPosition = Vector2.zero;
+            systemStarIconInstance.name = $"System_{systemId}_Star";
+        }
+
+        CreateSystemWormholeIcons(systemId, system.position);
+        EnsurePlayerShipIcon();
+        RefreshSystemMapVisuals();
+        UpdatePlayerShipIconPosition();
+    }
+
+    private void CreateSystemWormholeIcons(int systemId, Vector2 systemPosition)
+    {
+        if (systemMapContentRect == null || galaxy == null || systemWormholeIconPrefab == null)
+            return;
+
+        var neighbors = galaxy.GetNeighbors(systemId);
+        if (neighbors == null || neighbors.Count == 0)
+            return;
+
+        float angleStep = 360f / Mathf.Max(1, neighbors.Count);
+
+        for (int i = 0; i < neighbors.Count; i++)
+        {
+            int neighborId = neighbors[i];
+            int wormholeId = FindWormholeIdBetween(systemId, neighborId);
+
+            Vector2 dir = GetDirectionToNeighbor(systemPosition, neighborId, i * angleStep);
+            RectTransform icon = Instantiate(systemWormholeIconPrefab, systemMapContentRect);
+            icon.name = $"System_{systemId}_Wormhole_{wormholeId}";
+            icon.anchoredPosition = dir * GetSystemMapUiRadius();
+
+            systemWormholeIconsById[wormholeId] = icon;
+        }
+    }
+
+    private Vector2 GetDirectionToNeighbor(Vector2 systemPosition, int neighborId, float fallbackAngle)
+    {
+        if (galaxy.SystemsById.TryGetValue(neighborId, out var neighbor))
+        {
+            Vector2 dir = neighbor.position - systemPosition;
+            if (dir.sqrMagnitude > 0.0001f)
+            {
+                return dir.normalized;
+            }
+        }
+
+        float angleRad = fallbackAngle * Mathf.Deg2Rad;
+        return new Vector2(Mathf.Cos(angleRad), Mathf.Sin(angleRad));
+    }
+
+    private void EnsurePlayerShipIcon()
+    {
+        if (playerShipIconInstance == null && playerShipIconPrefab != null && systemMapContentRect != null)
+        {
+            playerShipIconInstance = Instantiate(playerShipIconPrefab, systemMapContentRect);
+            playerShipIconInstance.name = "System_PlayerShip";
+        }
+    }
+
+    private void UpdateSystemMapDynamicElements()
+    {
+        UpdatePlayerShipIconPosition();
+    }
+
+    private void UpdatePlayerShipIconPosition()
+    {
+        if (playerShipIconInstance == null)
+            return;
+
+        var gm = GameManager.Instance;
+        bool shouldShow = gm != null && discovery != null && discovery.CurrentSystemId == activeSystemMapSystemId && gm.PlayerShip != null;
+        playerShipIconInstance.gameObject.SetActive(shouldShow);
+
+        if (!shouldShow)
+            return;
+
+        Vector3 center = gm.CurrentSystemWorldPosition;
+        Vector3 shipPos = gm.PlayerShip.transform.position;
+        Vector3 offset = shipPos - center;
+
+        float uiRadius = GetSystemMapUiRadius();
+        float worldRadius = GetSystemMapWorldRadius();
+        if (worldRadius < 0.001f)
+            worldRadius = 1f;
+
+        Vector2 mapped = new Vector2(offset.x, offset.z) * (uiRadius / worldRadius);
+        playerShipIconInstance.anchoredPosition = mapped;
+    }
+
+    private float GetSystemMapUiRadius()
+    {
+        if (systemBoundaryCircle != null)
+        {
+            return systemBoundaryCircle.rect.width * 0.5f;
+        }
+
+        if (systemMapContentRect != null)
+        {
+            return Mathf.Min(systemMapContentRect.rect.width, systemMapContentRect.rect.height) * 0.4f;
+        }
+
+        return 100f;
+    }
+
+    private float GetSystemMapWorldRadius()
+    {
+        if (GameManager.Instance != null && GameManager.Instance.GateRingRadius > 0f)
+        {
+            return GameManager.Instance.GateRingRadius;
+        }
+
+        return systemMapWorldRadius;
+    }
+
+    private int FindWormholeIdBetween(int systemAId, int systemBId)
+    {
+        if (galaxy == null || galaxy.Wormholes == null)
+            return -1;
+
+        for (int i = 0; i < galaxy.Wormholes.Count; i++)
+        {
+            var w = galaxy.Wormholes[i];
+            if (w.IsIncidentTo(systemAId) && w.GetOtherSystem(systemAId) == systemBId)
+            {
+                return w.id;
+            }
+        }
+
+        return -1;
+    }
+
     private void ClampPanToBounds()
     {
         if (mapContentRect == null)
+            return;
+
+        if (currentMode != MapMode.Galaxy)
             return;
 
         RectTransform parentRect = mapContentRect.parent as RectTransform;

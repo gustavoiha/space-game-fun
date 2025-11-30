@@ -135,7 +135,7 @@ Each task has an ID (e.g. `M1.1`) so tools and humans can reference them unambig
 - **M2.4 - Zooming on map (implemented)**
   - Pivot center of zooming on the map should be the mouse pointer.
 
-- **M2.5 - Star system map**
+- **M2.5 - Star system map (implemented)**
   - Map UI will allow user to see both the galaxy view and a star system view.
   - By default, the map is opened in the local star system view.
   - A star system map consists of:
