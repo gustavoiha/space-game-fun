@@ -98,8 +98,8 @@ Assets/
 - Generation:
   - `void GenerateGalaxy(int seed, GalaxyConfig config)`
     - Uses:
-      - Min/max distance constraints with random sampling between them (no distribution curve bias).
-      - Randomized connection counts within min/max instead of a distribution curve.
+      - Min/max distance constraints with Poisson-disk style sampling (multiple candidates per active site) plus a small jitter to avoid grid artifacts.
+      - Connection counts drawn from configurable weights for 1–5 links (rare 4–5 hubs) and clamped within min/max.
       - A Solar System constraint that forces Earth (system ID 0) to expose exactly one wormhole.
 
 ### Dependencies & Usage

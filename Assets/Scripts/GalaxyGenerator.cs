@@ -23,6 +23,12 @@ public class GalaxyGenerator : MonoBehaviour
     [Tooltip("Maximum allowed distance between two systems.")]
     [SerializeField] private float maxSystemDistance = 60f;
 
+    [Tooltip("How many candidate points to try per active site in Poisson sampling.")]
+    [SerializeField] private int poissonCandidatesPerPoint = 12;
+
+    [Tooltip("Small random offset applied after a valid sample to avoid overly regular layouts.")]
+    [SerializeField] private float placementJitter = 0.5f;
+
     [Tooltip("How many attempts to make for a valid placement before falling back to edge placement.")]
     [SerializeField] private int maxPlacementRetries = 8;
 
@@ -31,7 +37,10 @@ public class GalaxyGenerator : MonoBehaviour
     [SerializeField] private int minConnectionsPerSystem = 1;
 
     [Tooltip("Maximum number of wormhole connections each system should have.")]
-    [SerializeField] private int maxConnectionsPerSystem = 4;
+    [SerializeField] private int maxConnectionsPerSystem = 5;
+
+    [Tooltip("Relative weights for systems having 1–5 wormholes (index 0 => 1 wormhole, etc.).")]
+    [SerializeField] private List<float> connectionWeights = new List<float> { 0.3f, 0.35f, 0.2f, 0.08f, 0.02f };
 
     [Tooltip("Earth's Solar System (system ID 0) is forced to have exactly one wormhole connection.")]
     [SerializeField] private int earthSystemId = 0;
@@ -146,19 +155,38 @@ public class GalaxyGenerator : MonoBehaviour
         // First system at origin
         AddSystem(Vector2.zero);
 
+        List<Vector2> activeSites = new List<Vector2> { systems[0].position };
         int safety = 0;
-        while (systems.Count < targetSystemCount && safety < targetSystemCount * 50)
+        int maxIterations = Mathf.Max(targetSystemCount * maxPlacementRetries * 4, targetSystemCount * 8);
+
+        while (systems.Count < targetSystemCount && safety < maxIterations)
         {
             safety++;
 
-            Vector2 candidatePosition = Vector2.zero;
+            // If we run out of active sites, reseed from the current edge to keep expanding outward.
+            if (activeSites.Count == 0)
+            {
+                Vector2 reseed = SampleEdgePlacement();
+                if (IsPositionValid(reseed))
+                {
+                    AddSystem(reseed);
+                    activeSites.Add(reseed);
+                }
+
+                continue;
+            }
+
+            int activeIndex = UnityEngine.Random.Range(0, activeSites.Count);
+            Vector2 center = activeSites[activeIndex];
             bool placed = false;
 
-            for (int attempt = 0; attempt < maxPlacementRetries; attempt++)
+            for (int attempt = 0; attempt < poissonCandidatesPerPoint; attempt++)
             {
-                candidatePosition = SampleRandomPosition();
-                if (IsPositionValid(candidatePosition))
+                Vector2 candidate = SamplePoissonCandidate(center);
+                if (IsPositionValid(candidate))
                 {
+                    AddSystem(candidate);
+                    activeSites.Add(candidate);
                     placed = true;
                     break;
                 }
@@ -166,12 +194,8 @@ public class GalaxyGenerator : MonoBehaviour
 
             if (!placed)
             {
-                candidatePosition = SampleEdgePlacement();
-                placed = IsPositionValid(candidatePosition) || systems.Count == 0;
+                activeSites.RemoveAt(activeIndex);
             }
-
-            if (placed)
-                AddSystem(candidatePosition);
         }
     }
 
@@ -192,7 +216,7 @@ public class GalaxyGenerator : MonoBehaviour
         MaxPosition = Vector2.Max(MaxPosition, position);
     }
 
-    private Vector2 SampleRandomPosition()
+    private Vector2 SamplePoissonCandidate(Vector2 center)
     {
         float angle = UnityEngine.Random.Range(0f, Mathf.PI * 2f);
         float spanMin = Mathf.Max(minSystemDistance, 0.001f);
@@ -200,7 +224,12 @@ public class GalaxyGenerator : MonoBehaviour
         float distance = UnityEngine.Random.Range(spanMin, spanMax);
 
         Vector2 direction = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
-        return direction * distance;
+        Vector2 candidate = center + direction * distance;
+
+        if (placementJitter > 0f)
+            candidate += UnityEngine.Random.insideUnitCircle * placementJitter;
+
+        return candidate;
     }
 
     private Vector2 SampleEdgePlacement()
@@ -303,7 +332,7 @@ public class GalaxyGenerator : MonoBehaviour
                 continue;
             }
 
-            int targetConnections = UnityEngine.Random.Range(minConnectionsPerSystem, maxConnectionsPerSystem + 1);
+            int targetConnections = SampleDesiredConnectionCount();
             desiredConnections[i] = Mathf.Clamp(targetConnections, minConnectionsPerSystem, maxConnectionsPerSystem);
             currentConnections[i] = 0;
         }
@@ -341,6 +370,37 @@ public class GalaxyGenerator : MonoBehaviour
         }
 
         EnsureEarthHasSingleWormhole(ref wormholeId);
+    }
+
+    private int SampleDesiredConnectionCount()
+    {
+        if (connectionWeights == null || connectionWeights.Count == 0)
+            return UnityEngine.Random.Range(minConnectionsPerSystem, maxConnectionsPerSystem + 1);
+
+        float totalWeight = 0f;
+        for (int i = 0; i < connectionWeights.Count; i++)
+        {
+            totalWeight += Mathf.Max(0f, connectionWeights[i]);
+        }
+
+        if (totalWeight <= 0f)
+            return UnityEngine.Random.Range(minConnectionsPerSystem, maxConnectionsPerSystem + 1);
+
+        float pick = UnityEngine.Random.Range(0f, totalWeight);
+        float cumulative = 0f;
+
+        for (int i = 0; i < connectionWeights.Count; i++)
+        {
+            float w = Mathf.Max(0f, connectionWeights[i]);
+            if (w <= 0f)
+                continue;
+
+            cumulative += w;
+            if (pick <= cumulative)
+                return Mathf.Min(i + 1, maxConnectionsPerSystem); // index 0 => 1 connection
+        }
+
+        return Mathf.Min(connectionWeights.Count, maxConnectionsPerSystem);
     }
 
     private int FindBestNeighborIndex(int systemIndex, int[] currentConnections, int[] desiredConnections)

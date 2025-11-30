@@ -66,7 +66,7 @@ Each task has an ID (e.g. `M1.1`) so tools and humans can reference them unambig
   - Add parameters:
     - `minSystemDistance`.
     - `maxSystemDistance`.
-  - Place systems around the origin using random distances between min and max.
+  - Place systems around the origin using Poisson-disk style sampling with jitter to stay uniform while keeping patterns organic.
 
 - **M1.2 – Connection Distribution (implemented)**
   - Add parameters:
@@ -74,7 +74,7 @@ Each task has an ID (e.g. `M1.1`) so tools and humans can reference them unambig
     - `maxConnectionsPerSystem`.
   - Use this to create wormhole links:
     - Ensure overall connectivity (ideally a single connected graph, or very few components).
-    - Sample connection counts randomly within the configured min/max instead of using a distribution curve.
+    - Sample connection counts from configurable weights (1–5) so high-degree hubs (4–5) stay rare.
 
 - **M1.5 – Solar System Wormhole Cap (implemented)**
   - Ensure Earth's Solar System (system ID 0) always has exactly one wormhole connection.
