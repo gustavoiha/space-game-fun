@@ -32,6 +32,11 @@ public class GameDiscoveryState : MonoBehaviour
     private readonly HashSet<int> discoveredSystems = new HashSet<int>();
     private readonly HashSet<int> discoveredWormholes = new HashSet<int>();
 
+    /// <summary>
+    /// Systems the player has actually entered. This is a subset of discovered systems.
+    /// </summary>
+    private readonly HashSet<int> visitedSystems = new HashSet<int>();
+
     private int currentSystemId = -1;
     private GalaxyGenerator galaxy;
 
@@ -55,6 +60,11 @@ public class GameDiscoveryState : MonoBehaviour
     public IReadOnlyCollection<int> GetDiscoveredWormholes()
     {
         return discoveredWormholes;
+    }
+
+    public IReadOnlyCollection<int> GetVisitedSystems()
+    {
+        return visitedSystems;
     }
 
     private void Awake()
@@ -98,11 +108,13 @@ public class GameDiscoveryState : MonoBehaviour
     {
         discoveredSystems.Clear();
         discoveredWormholes.Clear();
+        visitedSystems.Clear();
 
         currentSystemId = systemId;
 
-        // Starting system is discovered and its local wormholes are known
+        // Starting system is discovered, visited, and its local wormholes are known
         DiscoverSystemInternal(systemId, raiseEvents: false);
+        MarkSystemVisited(systemId);
 
         RaiseDiscoveryChanged();
         RaiseCurrentSystemChanged();
@@ -158,13 +170,13 @@ public class GameDiscoveryState : MonoBehaviour
         EnsureGalaxy();
 
         currentSystemId = systemId;
-        bool discoveryChanged = false;
+        bool discoveryChanged = MarkSystemVisited(systemId);
 
         // Ensure the system is discovered
+        // (MarkSystemVisited already adds to discoveredSystems; this call preserves previous behavior
+        //  in case another caller cleared visited while keeping discovered.)
         if (discoveredSystems.Add(systemId))
-        {
             discoveryChanged = true;
-        }
 
         // Reveal all wormholes attached to this system
         if (DiscoverAllWormholesFrom(systemId, raiseEvents: false))
@@ -176,6 +188,20 @@ public class GameDiscoveryState : MonoBehaviour
             RaiseDiscoveryChanged();
 
         RaiseCurrentSystemChanged();
+    }
+
+    /// <summary>
+    /// Adds the system to the visited set, ensuring the subset relationship is maintained.
+    /// </summary>
+    private bool MarkSystemVisited(int systemId)
+    {
+        if (systemId < 0)
+            return false;
+
+        bool newlyVisited = visitedSystems.Add(systemId);
+        bool newlyDiscovered = discoveredSystems.Add(systemId);
+
+        return newlyVisited || newlyDiscovered;
     }
 
     /// <summary>
