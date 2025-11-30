@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.Serialization;
 
 /// <summary>
 /// Free-flight ship controller using the new Input System.
@@ -19,7 +20,9 @@ public class PlayerShipController : MonoBehaviour
     public float damping = 1f;
 
     [Header("Bounds")]
-    public float worldExtent = 1000f;
+    [Tooltip("Radius of the playable space around the current star system center.")]
+    [FormerlySerializedAs("worldExtent")]
+    [SerializeField] private float systemBoundaryRadius = 5000f;
 
     private Vector3 velocity = Vector3.zero;
 
@@ -64,11 +67,31 @@ public class PlayerShipController : MonoBehaviour
         transform.position += velocity * Time.deltaTime;
         velocity = Vector3.Lerp(velocity, Vector3.zero, damping * Time.deltaTime);
 
-        // Clamp to bounds
-        Vector3 pos = transform.position;
-        pos.x = Mathf.Clamp(pos.x, -worldExtent, worldExtent);
-        pos.y = Mathf.Clamp(pos.y, -worldExtent, worldExtent);
-        pos.z = Mathf.Clamp(pos.z, -worldExtent, worldExtent);
-        transform.position = pos;
+        ConstrainToSystemBounds();
+    }
+
+    /// <summary>
+    /// Keep the ship inside a spherical boundary around the current system center.
+    /// </summary>
+    private void ConstrainToSystemBounds()
+    {
+        if (systemBoundaryRadius <= 0f)
+            return;
+
+        Vector3 center = Vector3.zero;
+        var gm = GameManager.Instance;
+        if (gm != null)
+            center = gm.CurrentSystemWorldPosition;
+
+        Vector3 offsetFromCenter = transform.position - center;
+        float radius = systemBoundaryRadius;
+
+        if (offsetFromCenter.sqrMagnitude > radius * radius)
+        {
+            // Clamp position to the sphere surface and remove outward velocity to reduce jitter.
+            Vector3 clampedOffset = offsetFromCenter.normalized * radius;
+            transform.position = center + clampedOffset;
+            velocity = Vector3.ProjectOnPlane(velocity, offsetFromCenter.normalized);
+        }
     }
 }

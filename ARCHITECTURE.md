@@ -26,6 +26,7 @@ Core ideas:
 - **Game State**
   - `GameDiscoveryState.cs`
 - **World / Gameplay**
+  - `PlayerShipController.cs`
   - `WormholeGate.cs`
   - `ShipWormholeNavigator.cs`
 - **UI / Map**
@@ -192,6 +193,30 @@ Assets/
 - **Used by:**
   - `ShipWormholeNavigator` during jump initiation.
   - Contextual UI (to show prompts like “Approaching Wormhole to [System]”).
+
+---
+
+## World / Gameplay: `PlayerShipController.cs`
+
+### Responsibility
+
+- Provides free-flight controls using the new Input System (thrust forward/back, yaw/pitch/roll with damping).
+- Enforces in-system bounds so the player cannot drift infinitely far from the active star system.
+
+### Key Behaviours
+
+- Integrates velocity with configurable thrust, max speed, and damping.
+- Clamps the ship to a **spherical boundary** around the current system’s world position (`GameManager.CurrentSystemWorldPosition`):
+  - Radius controlled by the serialized `systemBoundaryRadius` (defaults to 5000).
+  - Falls back to world origin if no `GameManager` is present.
+  - Projects velocity off the outward normal when clamping to reduce edge jitter.
+
+### Dependencies & Usage
+
+- **Depends on:**
+  - `GameManager` for the current system’s world position (optional; safe fallback to origin).
+- **Used by:**
+  - Player ship prefab for basic movement and boundary enforcement.
 
 ---
 

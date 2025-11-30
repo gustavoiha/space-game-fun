@@ -53,6 +53,11 @@ Each task has an ID (e.g. `M1.1`) so tools and humans can reference them unambig
     - Add newly discovered systems and wormholes.
   - Fix the issue where the player must close/reopen the map to see changes.
 
+- **M0.6 – In-System Boundary Rework (implemented)**
+  - Replace the global cube clamp with a per-system spherical boundary in `PlayerShipController`.
+  - Boundary is centered on `GameManager.CurrentSystemWorldPosition`; falls back to origin if unavailable.
+  - Radius is configurable via `systemBoundaryRadius` (default 5000); outward velocity is projected to reduce jitter when clamped.
+
 ---
 
 ## Milestone 1 – Galaxy Generation & Topology
@@ -130,9 +135,24 @@ Each task has an ID (e.g. `M1.1`) so tools and humans can reference them unambig
 - **M2.4 - Zooming on map (implemented)**
   - Pivot center of zooming on the map should be the mouse pointer.
 
+- **M2.5 - Star system map**
+  - Map UI will allow user to see both the galaxy view and a star system view.
+  - By default, the map is opened in the local star system view.
+  - A star system map consists of:
+    - A circle defining the delimited star system area.
+    - A star in the middle.
+    - Icons indicating the position of wormholes.
+    - Icons indicating position of player's ship.
+  - When zooming out to a custommizable threshold:
+    - Map UI will switch from star system map to galaxy map.
+    - Galaxy map should appear centered in star system that was zoomed in.
+  - When zooming in close to a star, in the galaxy mode:
+    - Map UI will switch to star system map.
+  - Clicking on a star will also open its star system map.
+
 ### M2 – Interaction
 
-- **M2.5 – System Selection**
+- **M2.6 – System Selection**
   - Enable clicking on a system node to:
     - Select/highlight it.
     - Open a small info panel showing:
@@ -141,14 +161,14 @@ Each task has an ID (e.g. `M1.1`) so tools and humans can reference them unambig
       - Basic properties (e.g. hazard level, known stations).
   - Clearly indicate the current system (e.g. halo, size difference, color).
 
-- **M2.6 – Wormhole Selection**
+- **M2.7 – Wormhole Selection**
   - Enable selecting wormhole edges:
     - Click on line or a gate icon on the map.
     - Show the two connected systems.
     - Provide a quick button to focus the map camera on the adjacent system.
   - Support the UX pattern: “Click wormhole, see the adjacent star system immediately.”
 
-- **M2.7 – Jump / Navigation from Map**
+- **M2.8 – Jump / Navigation from Map**
   - From the current system, allow:
     - Selecting an adjacent system on the map and issuing a “jump” or “set course” command.
   - Internally:
