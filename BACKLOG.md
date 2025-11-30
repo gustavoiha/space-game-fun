@@ -1,0 +1,322 @@
+# Space Game Development Backlog
+
+Backlog for the Wormhole Era space exploration and reconstruction game.
+
+Each task has an ID (e.g. `M1.1`) so tools and humans can reference them unambiguously.
+
+---
+
+## Milestone 0 – Stabilize Current Prototype (Gates, Discovery, Map)
+
+**Goal:** Reliable travel between systems via wormholes, with correct discovery state and a working map that updates without reopening.
+
+### M0 – Data & Architecture
+
+- **M0.1 – System & Wormhole IDs**
+  - Ensure each star system has a unique, persistent ID (e.g. ScriptableObject or data class).
+  - Ensure each wormhole/gate pair has unique IDs and references their source/target systems.
+  - Centralize this in a `GalaxyState` (or equivalent) manager so UI and gameplay share the same data source.
+
+- **M0.2 – Discovery State**
+  - Add data structures to track:
+    - Discovered systems.
+    - Visited systems (subset of discovered).
+    - Discovered wormholes.
+  - Hook discovery updates into:
+    - Initial starting system.
+    - Successful wormhole jumps.
+
+### M0 – Wormhole Travel & Prompts
+
+- **M0.3 – Refactor Wormhole Jump Flow**
+  - Update `WormholeGate` so it exposes a “can jump / jump target” API.
+  - Move the actual jump decision to the ship/controller:
+    - Ship requests jump through a gate.
+    - Gate validates and triggers scene/system transition.
+  - Keep jump logic reusable for player and AI ships.
+
+- **M0.4 – Screen-Space Wormhole Prompt**
+  - Create a `GatePromptLabel` prefab using TextMeshPro (screen-space UI).
+  - Hook it into the ship’s targeting/proximity logic so:
+    - When in range of a gate, show “Press [key] to jump to [SystemName]”.
+    - When out of range or target changes, hide/refresh the prompt.
+  - Ensure this works with the ship as a prefab (no direct scene references; prefer events or a shared manager).
+
+### M0 – Map Refresh Issues
+
+- **M0.5 – Event-Based Map Refresh**
+  - Create events in `GalaxyState`, e.g.:
+    - `OnSystemDiscovered`.
+    - `OnCurrentSystemChanged`.
+  - Make `GalaxyMapUIManager` subscribe to these events to:
+    - Update current-system highlight.
+    - Add newly discovered systems and wormholes.
+  - Fix the issue where the player must close/reopen the map to see changes.
+
+---
+
+## Milestone 1 – Galaxy Generation & Topology
+
+**Goal:** Generate a believable Wormhole Era network according to new rules (average distance, non-linear spread, connection counts).
+
+### M1 – GalaxyGenerator Overhaul
+
+- **M1.1 – Distance-Based Placement**
+  - Remove `galaxySize` dependency.
+  - Add parameters:
+    - `averageSystemDistance`.
+    - `minSystemDistance`.
+    - `maxSystemDistance`.
+  - Place systems around the origin using `averageSystemDistance ± randomOffset`, with:
+    - More systems near the average distance.
+    - Fewer systems extremely close or extremely far.
+  - Use a non-linear distribution (e.g. via curve-based random) rather than uniform randomness.
+
+- **M1.2 – Connection Distribution**
+  - Add parameters:
+    - `minConnectionsPerSystem`.
+    - `maxConnectionsPerSystem`.
+    - `connectionDistributionCurve` (e.g. `AnimationCurve` controlling how many systems become hubs).
+  - Use this to create wormhole links:
+    - Ensure overall connectivity (ideally a single connected graph, or very few components).
+    - Respect the curve: majority of systems with “typical” degree, a few high-degree hubs, a few sparse systems.
+
+- **M1.3 – Edge Placement Fallback**
+  - When a new star placement is too close to existing stars:
+    - Try a limited number of retries with different offsets.
+    - If all retries fail, place the star further out toward “edge” regions (e.g. using current max radius).
+  - Avoid infinite loops and ensure predictable generation time.
+
+- **M1.4 – Map Extents Output**
+  - From generated systems, compute spatial extents:
+    - `minX`, `maxX`, `minY`, `maxY`.
+  - Expose these values to `GalaxyMapUIManager` so it can:
+    - Auto-fit the map camera.
+    - Normalize coordinates into map space.
+
+---
+
+## Milestone 2 – Galaxy Map UX (2D Star Map with Lines, Zoom, Pan)
+
+**Goal:** A 2D star map that visualizes the Wormhole Era network, supports zoom/pan, and reflects the player’s current position and discoveries.
+
+### M2 – Rendering & Navigation
+
+- **M2.1 – Coordinate Normalization**
+  - Decide a mapping from galaxy world coordinates to 2D map space (e.g. 0–1 or UI pixels).
+  - Use the extents from `M1.4` to normalize positions:
+    - Maintain aspect ratio.
+    - Keep systems inside map bounds.
+
+- **M2.2 – Pannable / Zoomable Map**
+  - Implement pan and zoom controls:
+    - Pan via mouse drag and/or WASD/arrow keys.
+    - Zoom via mouse scroll.
+  - Implementation options:
+    - Dedicated camera rendering a world-space map.
+    - UI-based map using RectTransforms with scale/position changes (e.g. within a ScrollRect).
+
+- **M2.3 – Draw Systems & Wormhole Lines**
+  - Render system nodes:
+    - Distinct visuals for:
+      - Current system.
+      - Discovered systems.
+      - Undiscovered (not shown or shown as unknown).
+  - Draw lines for wormholes between discovered systems.
+  - Ensure this updates when:
+    - New systems are discovered.
+    - Wormholes become known.
+    - The current system changes.
+  - Drive these updates via `GalaxyState` events from `M0.5`.
+
+### M2 – Interaction
+
+- **M2.4 – System Selection**
+  - Enable clicking on a system node to:
+    - Select/highlight it.
+    - Open a small info panel showing:
+      - System name.
+      - Faction.
+      - Basic properties (e.g. hazard level, known stations).
+  - Clearly indicate the current system (e.g. halo, size difference, color).
+
+- **M2.5 – Wormhole Selection**
+  - Enable selecting wormhole edges:
+    - Click on line or a gate icon on the map.
+    - Show the two connected systems.
+    - Provide a quick button to focus the map camera on the adjacent system.
+  - Support the UX pattern: “Click wormhole, see the adjacent star system immediately.”
+
+- **M2.6 – Jump / Navigation from Map**
+  - From the current system, allow:
+    - Selecting an adjacent system on the map and issuing a “jump” or “set course” command.
+  - Internally:
+    - Map selection to an actual gate or route for the player ship.
+    - Reuse wormhole jump logic from `M0.3`.
+
+---
+
+## Milestone 3 – System View and In-System Control
+
+**Goal:** From the galaxy map, zoom into a system, see ships, and issue basic orders.
+
+### M3 – System View
+
+- **M3.1 – System View Scene/Layout**
+  - Implement a 2D or light 3D view for a single star system:
+    - Display gates (wormholes).
+    - Display stations/colonies (when implemented).
+    - Display ships (player and AI).
+  - Keep the layout readable and consistent with the galaxy map.
+
+- **M3.2 – Transition Map ↔ System View**
+  - From the galaxy map:
+    - Allow zoom-in or a dedicated button to enter the current system view.
+  - From the system view:
+    - Allow returning to the galaxy map without full scene reload if possible (UI-driven layer).
+  - Ensure current system context is preserved between views.
+
+- **M3.3 – Ship Selection & Basic Orders**
+  - Implement selection mechanics:
+    - Click-to-select single ship.
+    - Optional drag-select for multiple ships (later).
+  - Provide basic orders for selected ships:
+    - Move to point/waypoint.
+    - Dock/undock when stations are present (future integration).
+    - Jump via gate (integrating with `WormholeGate` logic and `M0.3`).
+
+---
+
+## Milestone 4 – Economy, Population, and Logistics Helpers
+
+**Goal:** Introduce core mechanics for “population as a resource” and “logistics via fleets,” including feedback on whether assigned ships are sufficient for an order.
+
+### M4 – Economy Foundation
+
+- **M4.1 – Resource Definitions**
+  - Define resource types (examples):
+    - Raw ore, refined metals, fuel, food, tech parts, etc.
+  - Define “Population” as a special resource type impacting:
+    - Production capacity.
+    - Growth.
+    - Potentially crew requirements.
+
+- **M4.2 – Colony/Station Model**
+  - Create a data model for colonies/stations:
+    - Population count.
+    - Storage capacity per resource type.
+    - Production/consumption rates.
+    - Optional attributes like stability or habitability.
+  - Integrate colony/station data with system view and galaxy state.
+
+- **M4.3 – Fleet Cargo & Capabilities**
+  - Extend ship/fleet data:
+    - Cargo capacity (per resource or generic).
+    - Speed and travel time modifiers.
+    - Fuel usage if modeled.
+    - Combat rating (for risk/evaluation).
+  - Ensure fleets can be referenced and manipulated from UI and order systems.
+
+### M4 – Orders & Evaluation
+
+- **M4.4 – Order Types**
+  - Implement basic order types:
+    - Transport cargo (A → B).
+    - Supply or “maintain threshold” orders.
+    - Patrol/escort orders (for later risk modeling).
+  - Define how orders are stored and executed over time.
+
+- **M4.5 – “Is This Enough Ships?” Evaluation**
+  - For each order, compute:
+    - Required cargo throughput.
+    - Expected travel time.
+    - Optional: required combat rating for safety.
+  - Compare with assigned fleet capabilities to determine:
+    - Sufficient / borderline / insufficient status.
+  - Integrate into order-creation UI:
+    - Show a simple indicator with a short explanation (e.g. “Expected trips per hour: X, required: Y”).
+
+---
+
+## Milestone 5 – Factions, Territory, and Wormhole Era Politics
+
+**Goal:** Make the galaxy feel like the Wormhole Era: Helios Protectorate vs Horizon Initiative vs alien polities, with territory and attitudes.
+
+### M5 – Faction Data & Ownership
+
+- **M5.1 – Faction ScriptableObjects**
+  - Create faction definitions for:
+    - Helios Protectorate.
+    - Horizon Initiative.
+    - Myriad Combine.
+    - Verdure Hegemony.
+    - Aelari Concord.
+    - Karthan Assemblies.
+    - Serathi Enclave.
+  - Include attributes:
+    - Name and display name.
+    - Emblem/icon.
+    - Primary color(s).
+    - Behavioral tags (authoritarian, exploratory, isolationist, etc.).
+
+- **M5.2 – System Ownership & Control**
+  - Assign each system an owning faction (or “unclaimed”).
+  - Optionally track:
+    - Control level or stability.
+    - Hostility/risk level for travel.
+
+- **M5.3 – Map Overlays**
+  - Add a faction overlay mode to the galaxy map:
+    - Color systems based on owning faction.
+    - Provide a legend for faction colors.
+  - Optionally show contested or neutral zones with distinct styling.
+
+### M5 – Reputation & Interaction
+
+- **M5.4 – Reputation System**
+  - Track player standing per faction:
+    - Example states: Allied, Friendly, Neutral, Wary, Hostile.
+  - Define simple rules for reputation changes:
+    - Missions completed.
+    - Trade.
+    - Attacking ships or violating territory.
+  - Hook reputation into:
+    - Access to certain systems.
+    - Prices and trade terms.
+    - AI behavior (pirates, patrols, etc.).
+
+---
+
+## Milestone 6 – Narrative Scaffolding (Shrouding, Sol, Long-Term Goal)
+
+**Goal:** Connect systems and mechanics to the lore: Earth as ruined but hopeful project, Helios-controlled Sol, and the long-term reconstruction theme.
+
+- **M6.1 – Special Systems**
+  - Define the Sol system as a special case:
+    - Owned by Helios Protectorate.
+    - Heavily fortified, restricted, or high-risk.
+  - Define Earth as a toxic graveyard world:
+    - Special environmental rules (e.g. uninhabitable surface, orbital infrastructure remnants).
+    - Unique visuals or markers in system and map views.
+  - Ensure these systems are non-random and always present.
+
+- **M6.2 – Progression Locks**
+  - Gate access to key systems/wormholes via:
+    - Reputation thresholds.
+    - Technology or research.
+    - Story milestones (e.g. specific missions completed).
+  - Implement a simple mechanism for “locked” vs “unlocked” wormholes and systems on the map.
+
+- **M6.3 – Event System**
+  - Implement an event layer capable of:
+    - Triggering story beats (e.g. Helios crackdowns, Horizon discoveries).
+    - Generating unique missions tied to:
+      - Reconstruction.
+      - Exploration of ancient wormhole tech.
+      - Political tensions in the network.
+  - Integrate events with:
+    - Factions.
+    - Systems (local incidents).
+    - Player fleets and colonies.
+
+This document should be updated as tasks are completed, and new mechanics are introduced.
