@@ -136,7 +136,7 @@ public class GalaxyMapUIManager : MonoBehaviour
 
         if (galaxyMapRoot == null)
         {
-            galaxyMapRoot = mapContentRect != null ? mapContentRect.gameObject : mapRoot;
+            galaxyMapRoot = mapContentRect != null ? mapContentRect.gameObject : mapCanvasRoot;
         }
 
         if (systemMapRoot == null && systemMapContentRect != null)
@@ -234,6 +234,14 @@ public class GalaxyMapUIManager : MonoBehaviour
         var parentCanvases = mapContentRect.GetComponentsInParent<Canvas>(true);
         if (parentCanvases == null || parentCanvases.Length == 0)
             return null;
+
+        foreach (var canvas in parentCanvases)
+        {
+            if (canvas != null && canvas.gameObject.name == "MapCanvas")
+            {
+                return canvas.gameObject;
+            }
+        }
 
         return parentCanvases[parentCanvases.Length - 1].gameObject;
     }
