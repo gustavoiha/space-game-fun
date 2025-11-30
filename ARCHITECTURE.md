@@ -262,7 +262,7 @@ Assets/
 
 - **Rendering Wormholes**
   - Draws UI lines between system icons.
-  - Enables a line only if the wormhole is discovered **and** both endpoint systems are discovered.
+  - Enables a line when the wormhole is discovered **and** both endpoints are visible on the map (discovered systems or frontier systems adjacent to a discovered system).
 
 - **Current System Highlight**
   - Highlights the icon of `GameDiscoveryState.currentSystemId`.

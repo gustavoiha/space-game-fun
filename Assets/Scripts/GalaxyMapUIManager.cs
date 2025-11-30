@@ -492,8 +492,8 @@ public class GalaxyMapUIManager : MonoBehaviour
 
             bool isCurrent = discovery.CurrentSystemId == systemId;
             bool isDiscovered = discovery.IsSystemDiscovered(systemId);
-            bool isFrontier = !isDiscovered && IsAdjacentToDiscovered(systemId);
-            bool shouldShow = isDiscovered || isFrontier;
+            bool shouldShow = ShouldShowSystemOnMap(systemId);
+            bool isFrontier = shouldShow && !isDiscovered;
 
             icon.gameObject.SetActive(shouldShow);
 
@@ -530,12 +530,23 @@ public class GalaxyMapUIManager : MonoBehaviour
                 continue;
             }
 
-            bool endpointsDiscovered = discovery.IsSystemDiscovered(link.fromSystemId) &&
-                                       discovery.IsSystemDiscovered(link.toSystemId);
             bool wormholeKnown = discovery.IsWormholeDiscovered(wormholeId);
+            bool endpointsVisible = ShouldShowSystemOnMap(link.fromSystemId) &&
+                                    ShouldShowSystemOnMap(link.toSystemId);
 
-            lineImage.enabled = endpointsDiscovered && wormholeKnown;
+            lineImage.enabled = wormholeKnown && endpointsVisible;
         }
+    }
+
+    private bool ShouldShowSystemOnMap(int systemId)
+    {
+        if (discovery == null)
+            return true;
+
+        if (discovery.IsSystemDiscovered(systemId))
+            return true;
+
+        return IsAdjacentToDiscovered(systemId);
     }
 
     private bool IsAdjacentToDiscovered(int systemId)

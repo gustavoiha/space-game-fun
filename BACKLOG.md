@@ -120,7 +120,7 @@ Each task has an ID (e.g. `M1.1`) so tools and humans can reference them unambig
       - Current system.
       - Discovered systems.
       - Undiscovered systems, shown as unknown (only for systems adjacent to discovered systems).
-  - Draw lines for wormholes between discovered systems.
+  - Draw lines for wormholes between discovered systems, and from discovered systems to adjacent frontier systems when the wormhole is known.
   - Ensure this updates when:
     - New systems are discovered.
     - Wormholes become known.
