@@ -1,111 +1,313 @@
 using UnityEngine;
-using UnityEngine.InputSystem;
 using TMPro;
 
 /// <summary>
-/// Handles wormhole interaction for a ship.
-/// - Finds nearest gate within a radius
-/// - Shows a screen-space prompt when a gate is in range
-/// - For player-controlled ships, listens for input to jump
+/// Handles interaction with wormholes:
+/// - Each frame, finds the nearest WormholeGate and shows a proximity prompt when close.
+/// - When the ship ENTERS a wormhole's trigger collider, the gate's collider is treated
+///   as the event horizon and the jump sequence is started.
+/// - Notifies GameManager / GameDiscoveryState to update current system & discovery.
+///
+/// No player input is required; jump is proximity + collider based.
+/// Requires a Rigidbody so physics triggers always work.
 /// </summary>
+[RequireComponent(typeof(Rigidbody))]
 public class ShipWormholeNavigator : MonoBehaviour
 {
-    [Header("Control")]
-    public bool isPlayerControlled = true;
+    [Header("Proximity Settings")]
+    [Tooltip("World distance from a wormhole within which the ship is considered 'close' and a prompt is shown.")]
+    [SerializeField] private float proximityDistance = 80f;
 
-    [Tooltip("Maximum distance to search for a gate to interact with.")]
-    public float interactionRadius = 40f;
+    [Tooltip("Cooldown between automatic wormhole jumps, in seconds.")]
+    [SerializeField] private float jumpCooldown = 2f;
 
-    [Tooltip("Key used by the player to trigger a jump.")]
-    public Key interactKey = Key.F;
+    [Tooltip("Optional delay before teleporting, to allow for VFX/animation.")]
+    [SerializeField] private float jumpDelaySeconds = 0.5f;
 
-    [Header("Screen Prompt UI")]
-    [Tooltip("Screen-space TextMeshProUGUI used to show the wormhole prompt. " +
-             "If not assigned, will try to find by tag.")]
-    public TextMeshProUGUI promptLabel;
+    [Header("UI References (optional)")]
+    [Tooltip("If assigned, this canvas will be used directly for the wormhole proximity/jump prompt.")]
+    [SerializeField] private Canvas promptCanvas;
 
-    [Tooltip("Tag used to auto-find the prompt label UI if 'promptLabel' is not assigned.")]
-    public string promptLabelTag = "GatePromptLabel";
+    [Tooltip("If assigned, this label will be used directly for the wormhole prompt text.")]
+    [SerializeField] private TMP_Text gatePromptLabel;
 
-    private WormholeGate currentGateInRange;
+    [Header("UI Lookup (Tags, fallback)")]
+    [Tooltip("Tag on the Canvas used to show the wormhole prompt.")]
+    [SerializeField] private string promptCanvasTag = "GatePromptCanvas";
+
+    [Tooltip("Tag on the TextMeshPro label used for the wormhole prompt text.")]
+    [SerializeField] private string gatePromptLabelTag = "GatePromptLabel";
+
+    [Header("Gate Scanning")]
+    [Tooltip("How often (in seconds) the navigator refreshes the list of wormhole gates in the scene.")]
+    [SerializeField] private float gatesRefreshInterval = 1f;
+
+    private WormholeGate[] cachedGates = new WormholeGate[0];
+    private float gatesRefreshTimer;
+
+    private WormholeGate nearestGateForPrompt;
+    private WormholeGate activeGateForJump;
+
+    private float lastJumpTime = -999f;
+    private bool isJumping;
 
     private void Awake()
     {
-        // Auto-find the prompt label in the scene if not wired in the prefab.
-        if (promptLabel == null && !string.IsNullOrEmpty(promptLabelTag))
+        ResolvePromptUI();
+        RefreshGatesImmediate();
+    }
+
+    private void Start()
+    {
+        // In case UI is instantiated later or scene changes, try resolving again.
+        if (promptCanvas == null || gatePromptLabel == null)
         {
-            GameObject go = GameObject.FindWithTag(promptLabelTag);
-            if (go != null)
-            {
-                promptLabel = go.GetComponent<TextMeshProUGUI>();
-            }
+            ResolvePromptUI();
         }
 
-        // Ensure it starts hidden
-        if (promptLabel != null)
-            promptLabel.gameObject.SetActive(false);
+        HidePrompt();
     }
 
     private void Update()
     {
-        var gm = GameManager.Instance;
-        if (gm == null) return;
-
-        // Find nearest gate within interactionRadius.
-        WormholeGate nearest = gm.FindNearestGate(transform.position, interactionRadius);
-
-        // If nearest gate changed, update the prompt.
-        if (nearest != currentGateInRange)
+        // Regularly refresh the list of gates, since GameManager may respawn them when systems change.
+        gatesRefreshTimer -= Time.deltaTime;
+        if (gatesRefreshTimer <= 0f)
         {
-            currentGateInRange = nearest;
-            UpdatePrompt();
+            RefreshGatesImmediate();
         }
 
-        if (currentGateInRange == null)
+        if (isJumping)
             return;
 
-        // Player-controlled: key press triggers TryActivate.
-        if (isPlayerControlled)
+        UpdateProximityPrompt();
+    }
+
+    /// <summary>
+    /// Searches for wormhole gates in the scene and caches them.
+    /// Uses FindObjectsByType on newer Unity versions, with a fallback for older ones.
+    /// </summary>
+    private void RefreshGatesImmediate()
+    {
+#if UNITY_2023_1_OR_NEWER
+        cachedGates = Object.FindObjectsByType<WormholeGate>(FindObjectsSortMode.None);
+#else
+        cachedGates = Object.FindObjectsOfType<WormholeGate>();
+#endif
+        gatesRefreshTimer = Mathf.Max(0.1f, gatesRefreshInterval);
+    }
+
+    /// <summary>
+    /// Resolve Canvas and TMP_Text via direct references or tags.
+    /// Direct references win; tags are only used if references are null.
+    /// </summary>
+    private void ResolvePromptUI()
+    {
+        if (promptCanvas == null && !string.IsNullOrEmpty(promptCanvasTag))
         {
-            var kb = Keyboard.current;
-            if (kb != null && kb[interactKey].wasPressedThisFrame)
+            GameObject canvasGO = null;
+            try
             {
-                bool jumped = currentGateInRange.TryActivate(this);
-                if (jumped)
+                canvasGO = GameObject.FindGameObjectWithTag(promptCanvasTag);
+            }
+            catch
+            {
+                // Tag might not exist; ignore.
+            }
+
+            if (canvasGO != null)
+            {
+                promptCanvas = canvasGO.GetComponent<Canvas>();
+                if (promptCanvas == null)
                 {
-                    currentGateInRange = null;
-                    UpdatePrompt();
+                    promptCanvas = canvasGO.GetComponentInChildren<Canvas>(true);
                 }
             }
         }
+
+        if (gatePromptLabel == null && !string.IsNullOrEmpty(gatePromptLabelTag))
+        {
+            GameObject labelGO = null;
+            try
+            {
+                labelGO = GameObject.FindGameObjectWithTag(gatePromptLabelTag);
+            }
+            catch
+            {
+                // Tag might not exist; ignore.
+            }
+
+            if (labelGO != null)
+            {
+                gatePromptLabel = labelGO.GetComponent<TMP_Text>();
+            }
+        }
+
+#if UNITY_EDITOR
+        if (promptCanvas == null)
+        {
+            Debug.LogWarning($"ShipWormholeNavigator: No prompt Canvas assigned and no object found with tag '{promptCanvasTag}'. Prompt UI will be hidden.");
+        }
+
+        if (gatePromptLabel == null)
+        {
+            Debug.LogWarning($"ShipWormholeNavigator: No prompt TMP_Text assigned and no object found with tag '{gatePromptLabelTag}'. Prompt text will be empty.");
+        }
+#endif
+    }
+
+    /// <summary>
+    /// Finds the nearest gate and shows/hides the proximity prompt.
+    /// </summary>
+    private void UpdateProximityPrompt()
+    {
+        nearestGateForPrompt = null;
+        float nearestDist = float.MaxValue;
+
+        Vector3 shipPos = transform.position;
+
+        for (int i = 0; i < cachedGates.Length; i++)
+        {
+            var gate = cachedGates[i];
+            if (gate == null)
+                continue;
+
+            float d = Vector3.Distance(shipPos, gate.transform.position);
+            if (d < proximityDistance && d < nearestDist)
+            {
+                nearestDist = d;
+                nearestGateForPrompt = gate;
+            }
+        }
+
+        if (nearestGateForPrompt != null)
+        {
+            ShowProximityPrompt(nearestGateForPrompt);
+        }
         else
         {
-            // NPC behaviour can decide when to call currentGateInRange.TryActivate(this).
+            HidePrompt();
         }
     }
 
-    private void UpdatePrompt()
+    private void ShowProximityPrompt(WormholeGate gate)
     {
-        if (promptLabel == null)
+        if (promptCanvas == null || gatePromptLabel == null)
             return;
 
-        if (currentGateInRange == null)
+        string destinationName = gate != null
+            ? gate.GetTargetSystemDisplayName()
+            : "unknown destination";
+
+        gatePromptLabel.text = $"You are close to a wormhole leading to {destinationName}";
+        promptCanvas.enabled = true;
+    }
+
+    private void ShowJumpingPrompt(WormholeGate gate)
+    {
+        if (promptCanvas == null || gatePromptLabel == null)
+            return;
+
+        string destinationName = gate != null
+            ? gate.GetTargetSystemDisplayName()
+            : "unknown destination";
+
+        gatePromptLabel.text = $"Entering wormhole to {destinationName}...";
+        promptCanvas.enabled = true;
+    }
+
+    private void HidePrompt()
+    {
+        if (promptCanvas != null)
+            promptCanvas.enabled = false;
+
+        if (gatePromptLabel != null)
+            gatePromptLabel.text = string.Empty;
+    }
+
+    /// <summary>
+    /// Called by WormholeGate when the ship's collider ENTERS the wormhole's trigger collider.
+    /// This collider is treated as the event horizon and starts the jump sequence.
+    /// </summary>
+    public void OnEventHorizonEntered(WormholeGate gate)
+    {
+        if (gate == null)
+            return;
+
+        if (isJumping)
+            return;
+
+        if (Time.time < lastJumpTime + jumpCooldown)
+            return;
+
+        activeGateForJump = gate;
+        StartJumpSequence();
+    }
+
+    private void StartJumpSequence()
+    {
+        if (activeGateForJump == null)
+            return;
+
+        isJumping = true;
+        lastJumpTime = Time.time;
+
+        ShowJumpingPrompt(activeGateForJump);
+
+        if (jumpDelaySeconds > 0f)
         {
-            promptLabel.gameObject.SetActive(false);
+            Invoke(nameof(PerformJump), jumpDelaySeconds);
         }
         else
         {
-            string targetName = "Unknown Destination";
-            var gm = GameManager.Instance;
-            if (gm != null && gm.galaxy != null)
+            PerformJump();
+        }
+    }
+
+    private void PerformJump()
+    {
+        if (activeGateForJump == null)
+        {
+            isJumping = false;
+            HidePrompt();
+            return;
+        }
+
+        int targetSystemId = activeGateForJump.GetTargetSystemId();
+        if (targetSystemId < 0)
+        {
+            Debug.LogWarning("ShipWormholeNavigator: Active gate has no valid target system.");
+            isJumping = false;
+            HidePrompt();
+            return;
+        }
+
+        int wormholeId = activeGateForJump.WormholeId;
+
+        var gm = GameManager.Instance;
+        if (gm != null)
+        {
+            if (wormholeId >= 0)
             {
-                var sys = gm.galaxy.GetSystem(currentGateInRange.targetSystemId);
-                if (sys != null)
-                    targetName = sys.displayName;
+                gm.DiscoverWormholeAndEndpoints(wormholeId);
+            }
+            else
+            {
+                gm.DiscoverSystem(targetSystemId);
             }
 
-            promptLabel.text = $"Press G to enter wormhole to {targetName}";
-            promptLabel.gameObject.SetActive(true);
+            gm.SetCurrentSystem(targetSystemId);
         }
+
+        var exit = activeGateForJump.ExitPoint;
+        if (exit != null)
+        {
+            transform.position = exit.position;
+            transform.rotation = exit.rotation;
+        }
+
+        HidePrompt();
+        isJumping = false;
+        activeGateForJump = null;
     }
 }

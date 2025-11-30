@@ -1,283 +1,223 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-/// High-level role of a star system in the setting.
-public enum SystemRole
-{
-    Normal,
-    Start,      // Horizon Initiative starting refuge
-    Solar,      // Sol / Helios-controlled Solar System
-    Core,
-    Frontier,
-    AlienHub
-}
-
-/// Which polity currently controls a system.
-public enum Faction
-{
-    None,
-    HorizonInitiative,
-    HeliosProtectorate,
-    MyriadCombine,
-    VerdureHegemony,
-    AelariConcord,
-    KarthanAssemblies,
-    SerathiEnclave
-}
-
-/// Logical description of a single star system (no visuals here).
-[System.Serializable]
-public class StarSystemData
-{
-    public int id;
-    public string displayName;
-    public SystemRole role;
-    public Faction faction;
-
-    public Vector3 position;
-
-    public bool discovered;   // visible on galaxy map
-    public bool visited;      // player has physically been here at least once
-
-    /// Indices of other systems this system is connected to via wormholes.
-    public List<int> wormholeLinks = new List<int>();
-}
-
 /// <summary>
-/// Generates the logical galaxy graph: star systems + wormhole links.
-/// This is pure data; visuals and gates are spawned elsewhere.
+/// Generates a procedural galaxy graph:
+/// - Star systems placed roughly around an average spacing with min/max constraints
+/// - Wormhole connections between systems, with a tunable connections-per-system curve
+///
+/// Each system and each wormhole has a stable integer ID for this galaxy instance.
+/// Other systems (map, save, gameplay) should reference systems and wormholes by ID.
 /// </summary>
 public class GalaxyGenerator : MonoBehaviour
 {
+    public static GalaxyGenerator Instance { get; private set; }
+
     [Header("Generation Settings")]
-    [Tooltip("How many procedural (unnamed) systems to add on top of the hand-authored ones.")]
-    public int proceduralStarCount = 15;
+    [SerializeField] private int targetSystemCount = 40;
 
-    [Tooltip("Optional random seed. 0 = use time-based seed.")]
-    public int randomSeed = 0;
+    [Tooltip("Average distance between systems in 'galaxy units' (map space).")]
+    [SerializeField] private float averageSystemSpacing = 30f;
 
-    [Tooltip("If true, all systems start as discovered (debug).")]
-    public bool revealAllAtStart = false;
+    [SerializeField] private float minSystemSpacing = 10f;
+    [SerializeField] private float maxSystemSpacing = 60f;
 
-    [Header("Spatial Layout")]
-    [Tooltip("Target average spacing between neighbouring systems.")]
-    public float averageSystemSpacing = 120f;
+    [Header("Connections")]
+    [Tooltip("Minimum number of wormhole connections each system should have.")]
+    [SerializeField] private int minConnectionsPerSystem = 1;
 
-    [Range(0f, 1f)]
-    [Tooltip("How much random variation to apply around the average spacing. 0 = perfectly uniform, 1 = strong variation.")]
-    public float spacingRandomness = 0.4f;
+    [Tooltip("Maximum number of wormhole connections each system should have.")]
+    [SerializeField] private int maxConnectionsPerSystem = 4;
 
-    [Tooltip("Minimum allowed distance between any two star systems; 0 disables this constraint.")]
-    public float minSystemSeparation = 60f;
+    [Tooltip("Curve controlling how many connections systems tend to get.\n" +
+             "X axis: 0..1 random value, Y axis: 0..1 mapped to [min,max] connections.\n" +
+             "Bias curve towards 0.3–0.6 for 'typical' connectivity, with tails for low/high outliers.")]
+    [SerializeField] private AnimationCurve connectionsPerSystemCurve = AnimationCurve.Linear(0f, 0.5f, 1f, 0.5f);
 
-    [Tooltip("Maximum suggested distance between neighbouring systems when sampling positions; 0 = no upper limit.")]
-    public float maxSystemSeparation = 240f;
+    [Header("Debug / Output")]
+    [SerializeField] private bool generateOnAwake = true;
 
-    [Tooltip("Maximum random placement attempts around existing systems before falling back to extending the outer edge.")]
-    public int maxPlacementAttemptsPerStar = 16;
+    [SerializeField] private List<SystemNode> systems = new List<SystemNode>();
+    [SerializeField] private List<WormholeLink> wormholes = new List<WormholeLink>();
 
-    [Header("Wormhole Connectivity")]
-    [Tooltip("Minimum number of wormhole links each system aims to have before connectivity fixes.")]
-    public int minNeighboursPerSystem = 1;
+    // ID lookups (built after generation)
+    public IReadOnlyList<SystemNode> Systems => systems;
+    public IReadOnlyList<WormholeLink> Wormholes => wormholes;
 
-    [Tooltip("Maximum number of wormhole links each system aims to have before connectivity fixes.")]
-    public int maxNeighboursPerSystem = 4;
+    public Dictionary<int, SystemNode> SystemsById { get; private set; } = new Dictionary<int, SystemNode>();
+    public Dictionary<int, WormholeLink> WormholesById { get; private set; } = new Dictionary<int, WormholeLink>();
 
-    [Tooltip("Curve controlling how link counts vary by radial distance from the origin (usually Sol).\nX = normalized radius [0,1], Y = 0–1 mapped to [min,max] links.")]
-    public AnimationCurve neighbourCountByRadius = AnimationCurve.Linear(0f, 1f, 1f, 1f);
+    /// <summary>
+    /// Adjacency list: systemId -> list of neighboring systemIds reachable via wormholes.
+    /// </summary>
+    public Dictionary<int, List<int>> NeighborsBySystemId { get; private set; } = new Dictionary<int, List<int>>();
 
-    private readonly List<StarSystemData> systems = new List<StarSystemData>();
-    public IReadOnlyList<StarSystemData> Systems => systems;
+    [Serializable]
+    public class SystemNode
+    {
+        [Tooltip("Stable unique ID for this system within the generated galaxy.")]
+        public int id;
 
-    // Galaxy origin used for "core vs edge" logic (Sol at 0,0,0 by convention).
-    private static readonly Vector3 GalaxyOrigin = Vector3.zero;
+        public Vector2 position;
+
+        [Tooltip("Optional display name; can be generated or assigned later.")]
+        public string displayName;
+    }
+
+    [Serializable]
+    public class WormholeLink
+    {
+        [Tooltip("Stable unique ID for this wormhole within the generated galaxy.")]
+        public int id;
+
+        [Tooltip("ID of the 'A' system.")]
+        public int fromSystemId;
+
+        [Tooltip("ID of the 'B' system.")]
+        public int toSystemId;
+
+        public bool IsIncidentTo(int systemId)
+        {
+            return fromSystemId == systemId || toSystemId == systemId;
+        }
+
+        public int GetOtherSystem(int systemId)
+        {
+            if (fromSystemId == systemId) return toSystemId;
+            if (toSystemId == systemId) return fromSystemId;
+            return systemId;
+        }
+    }
 
     private void Awake()
     {
-        GenerateGalaxy();
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
+
+        Instance = this;
+
+        if (generateOnAwake)
+        {
+            GenerateGalaxy();
+        }
+        else
+        {
+            RebuildLookups();
+        }
     }
 
     /// <summary>
-    /// Generates systems and wormhole links.
+    /// Public entry point for (re)generating the galaxy graph at runtime or in editor.
     /// </summary>
     public void GenerateGalaxy()
     {
         systems.Clear();
+        wormholes.Clear();
+        SystemsById.Clear();
+        WormholesById.Clear();
+        NeighborsBySystemId.Clear();
 
-        int seed = randomSeed != 0 ? randomSeed : (int)System.DateTime.Now.Ticks;
-        Random.InitState(seed);
-
-        // Ensure connectivity parameters are sane.
-        minNeighboursPerSystem = Mathf.Max(0, minNeighboursPerSystem);
-        maxNeighboursPerSystem = Mathf.Max(minNeighboursPerSystem, maxNeighboursPerSystem);
-
-        // --- Hand-authored key systems ---
-
-        // 0: Solar System (Helios-controlled, not starting position)
-        systems.Add(new StarSystemData
-        {
-            id = 0,
-            displayName = "Sol",
-            role = SystemRole.Solar,
-            faction = Faction.HeliosProtectorate,
-            position = GalaxyOrigin,
-            discovered = true,  // known as a legend / political centre
-            visited = false
-        });
-
-        // 1: Horizon start refuge (kept at a fixed authorial position)
-        systems.Add(new StarSystemData
-        {
-            id = 1,
-            displayName = "Horizon Refuge",
-            role = SystemRole.Start,
-            faction = Faction.HorizonInitiative,
-            position = new Vector3(-150f, 0f, 80f),
-            discovered = true,   // visible at start
-            visited = false
-        });
-
-        // --- Procedural extra systems ---
-
-        for (int i = 0; i < proceduralStarCount; i++)
-        {
-            int id = systems.Count;
-
-            Vector3 pos = GetNewSystemPosition();
-            var sys = new StarSystemData
-            {
-                id = id,
-                displayName = $"System {id}",
-                role = SystemRole.Normal,
-                faction = Faction.None,
-                position = pos,
-                discovered = false,   // hidden until discovered
-                visited = false
-            };
-
-            systems.Add(sys);
-        }
-
-        // --- Wormhole network ---
-
-        BuildWormholeNetwork();
-
-        // Optional debug: reveal everything.
-        if (revealAllAtStart)
-        {
-            foreach (var sys in systems)
-                sys.discovered = true;
-        }
+        GenerateSystems();
+        GenerateConnections();
+        RebuildLookups();
     }
 
     /// <summary>
-    /// Picks a new system position relative to existing systems, using
-    /// averageSystemSpacing with non-linear random variation and enforcing
-    /// minSystemSeparation. If random placement fails, extends the galaxy
-    /// outward from an edge system.
+    /// Generate star systems with approximate average spacing and min/max constraints.
     /// </summary>
-    private Vector3 GetNewSystemPosition()
+    private void GenerateSystems()
     {
-        if (systems.Count == 0)
-            return GalaxyOrigin;
+        if (targetSystemCount <= 0)
+            return;
 
-        int attempts = Mathf.Max(1, maxPlacementAttemptsPerStar);
-        Vector3 pos = GalaxyOrigin;
-        bool placed = false;
+        // First system at origin
+        AddSystem(Vector2.zero);
 
-        for (int attempt = 0; attempt < attempts; attempt++)
+        int safety = 0;
+        while (systems.Count < targetSystemCount && safety < targetSystemCount * 50)
         {
-            StarSystemData anchor = systems[Random.Range(0, systems.Count)];
+            safety++;
 
-            float distance = SampleNeighbourSpacing();
-            Vector3 dir = Random.onUnitSphere;
-            dir.y = 0f;
-            if (dir.sqrMagnitude < 0.0001f)
-                dir = Vector3.forward;
-            dir.Normalize();
+            SystemNode anchor = PickAnchorSystem();
+            Vector2 candidatePosition = GetRandomPositionAround(anchor.position);
 
-            Vector3 candidate = anchor.position + dir * distance;
-
-            if (IsPositionValid(candidate))
+            if (IsPositionValid(candidatePosition))
             {
-                pos = candidate;
-                placed = true;
-                break;
+                AddSystem(candidatePosition);
             }
         }
-
-        if (!placed)
-        {
-            // Fallback: extend from an outer edge system away from the galaxy origin.
-            StarSystemData edge = GetFurthestSystemFromOrigin();
-            if (edge == null)
-                return GalaxyOrigin;
-
-            Vector3 flatPos = new Vector3(edge.position.x, 0f, edge.position.z);
-            Vector3 outward = flatPos.sqrMagnitude > 0.0001f
-                ? flatPos.normalized
-                : Vector3.right;
-
-            float distance = SampleNeighbourSpacing();
-            Vector3 candidate = edge.position + outward * distance;
-
-            int safety = 0;
-            while (!IsPositionValid(candidate) && safety < 8)
-            {
-                float push = minSystemSeparation > 0f ? minSystemSeparation : averageSystemSpacing;
-                distance += push;
-                candidate = edge.position + outward * distance;
-                safety++;
-            }
-
-            pos = candidate;
-        }
-
-        return pos;
     }
 
-    /// <summary>
-    /// Samples a neighbour spacing distance around averageSystemSpacing,
-    /// with a non-linear distribution that clusters values near the average.
-    /// </summary>
-    private float SampleNeighbourSpacing()
+    private void AddSystem(Vector2 position)
     {
-        float baseDist = Mathf.Max(1f, averageSystemSpacing);
+        int id = systems.Count; // ID == index for now, stable within this generated galaxy
 
-        // Symmetric random in [-1,1].
-        float r = Random.Range(-1f, 1f);
+        var node = new SystemNode
+        {
+            id = id,
+            position = position,
+            displayName = $"SYS-{id:D3}"
+        };
 
-        // Non-linear shaping: squaring the magnitude biases values toward 0,
-        // so most distances are close to the average and fewer are far off.
-        float shaped = Mathf.Sign(r) * r * r; // still in [-1,1], but peaked near 0
-
-        float offsetFactor = shaped * spacingRandomness;
-        float d = baseDist * (1f + offsetFactor);
-
-        if (minSystemSeparation > 0f)
-            d = Mathf.Max(d, minSystemSeparation);
-        if (maxSystemSeparation > 0f)
-            d = Mathf.Min(d, maxSystemSeparation);
-
-        return d;
+        systems.Add(node);
     }
 
-    /// <summary>
-    /// Checks whether a candidate position is at least minSystemSeparation away
-    /// from all already-placed systems.
-    /// </summary>
-    private bool IsPositionValid(Vector3 candidatePos)
+    private SystemNode PickAnchorSystem()
     {
-        if (minSystemSeparation <= 0f || systems.Count == 0)
-            return true;
+        // Mild bias towards "edge" systems by picking one of the furthest few
+        if (systems.Count <= 3)
+            return systems[UnityEngine.Random.Range(0, systems.Count)];
 
-        float minSqr = minSystemSeparation * minSystemSeparation;
+        // Compute approximate center
+        Vector2 sum = Vector2.zero;
+        foreach (var s in systems)
+            sum += s.position;
 
-        foreach (var existing in systems)
+        Vector2 center = sum / systems.Count;
+
+        // Sort systems by distance from center and pick from outer half
+        systems.Sort((a, b) =>
         {
-            Vector3 delta = existing.position - candidatePos;
-            delta.y = 0f;
-            if (delta.sqrMagnitude < minSqr)
+            float da = (a.position - center).sqrMagnitude;
+            float db = (b.position - center).sqrMagnitude;
+            return da.CompareTo(db);
+        });
+
+        int startIndex = systems.Count / 2;
+        int index = UnityEngine.Random.Range(startIndex, systems.Count);
+        return systems[index];
+    }
+
+    private Vector2 GetRandomPositionAround(Vector2 origin)
+    {
+        float angle = UnityEngine.Random.Range(0f, Mathf.PI * 2f);
+
+        // Use a non-linear distribution around averageSystemSpacing:
+        // Sample t in [0,1], then bias it towards the center with a curve t^2 mirrored.
+        float t = UnityEngine.Random.value;
+        float centerBias = 1f - Mathf.Pow(1f - t, 2f); // more weight near 1
+        float offset = (centerBias - 0.5f) * 2f;       // [-1,1]
+
+        float distance = Mathf.Clamp(
+            averageSystemSpacing + offset * (maxSystemSpacing - minSystemSpacing) * 0.5f,
+            minSystemSpacing,
+            maxSystemSpacing
+        );
+
+        Vector2 direction = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
+        return origin + direction * distance;
+    }
+
+    private bool IsPositionValid(Vector2 candidate)
+    {
+        foreach (var s in systems)
+        {
+            float d = Vector2.Distance(candidate, s.position);
+            if (d < minSystemSpacing)
                 return false;
         }
 
@@ -285,178 +225,172 @@ public class GalaxyGenerator : MonoBehaviour
     }
 
     /// <summary>
-    /// Returns the system furthest from the galaxy origin on the XZ plane.
+    /// Generate wormhole connections between systems according to the per-system connection curve.
     /// </summary>
-    private StarSystemData GetFurthestSystemFromOrigin()
+    private void GenerateConnections()
     {
-        if (systems.Count == 0)
-            return null;
+        if (systems.Count <= 1)
+            return;
 
-        StarSystemData best = systems[0];
-        float bestSqr = new Vector2(best.position.x - GalaxyOrigin.x, best.position.z - GalaxyOrigin.z).sqrMagnitude;
+        // Precompute how many desired connections each system wants
+        int[] desiredConnections = new int[systems.Count];
+        int[] currentConnections = new int[systems.Count];
 
-        for (int i = 1; i < systems.Count; i++)
+        for (int i = 0; i < systems.Count; i++)
         {
-            var sys = systems[i];
-            float dSqr = new Vector2(sys.position.x - GalaxyOrigin.x, sys.position.z - GalaxyOrigin.z).sqrMagnitude;
-            if (dSqr > bestSqr)
+            float t = Mathf.Clamp01(UnityEngine.Random.value);
+            float curveValue = Mathf.Clamp01(connectionsPerSystemCurve.Evaluate(t));
+            int targetConnections = Mathf.RoundToInt(Mathf.Lerp(minConnectionsPerSystem, maxConnectionsPerSystem, curveValue));
+
+            desiredConnections[i] = Mathf.Max(minConnectionsPerSystem, targetConnections);
+            currentConnections[i] = 0;
+        }
+
+        // Simple "connect nearest neighbors" approach while enforcing desiredConnections
+        int wormholeId = 0;
+
+        for (int i = 0; i < systems.Count; i++)
+        {
+            var a = systems[i];
+            while (currentConnections[i] < desiredConnections[i])
             {
-                best = sys;
-                bestSqr = dSqr;
+                int bIndex = FindBestNeighborIndex(i, currentConnections, desiredConnections);
+                if (bIndex < 0)
+                    break;
+
+                if (CreateConnectionIfNotExists(ref wormholeId, i, bIndex))
+                {
+                    currentConnections[i]++;
+                    currentConnections[bIndex]++;
+                }
+                else
+                {
+                    // If the connection already exists, adjust desiredConnections to avoid infinite loops
+                    desiredConnections[i] = currentConnections[i];
+                }
+            }
+        }
+    }
+
+    private int FindBestNeighborIndex(int systemIndex, int[] currentConnections, int[] desiredConnections)
+    {
+        float bestScore = float.MaxValue;
+        int bestIndex = -1;
+
+        Vector2 position = systems[systemIndex].position;
+
+        for (int i = 0; i < systems.Count; i++)
+        {
+            if (i == systemIndex)
+                continue;
+
+            // Already saturated?
+            if (currentConnections[i] >= desiredConnections[i])
+                continue;
+
+            float distance = Vector2.Distance(position, systems[i].position);
+            float score = distance; // could add penalties / heuristics here
+
+            if (score < bestScore)
+            {
+                bestScore = score;
+                bestIndex = i;
             }
         }
 
-        return best;
+        return bestIndex;
+    }
+
+    private bool CreateConnectionIfNotExists(ref int wormholeId, int indexA, int indexB)
+    {
+        int idA = systems[indexA].id;
+        int idB = systems[indexB].id;
+
+        // Ensure consistent ordering: fromSystemId < toSystemId
+        if (idB < idA)
+        {
+            int tmp = idA;
+            idA = idB;
+            idB = tmp;
+        }
+
+        // Check if a wormhole already exists between these IDs
+        for (int i = 0; i < wormholes.Count; i++)
+        {
+            var w = wormholes[i];
+            if (w.fromSystemId == idA && w.toSystemId == idB)
+                return false;
+        }
+
+        var link = new WormholeLink
+        {
+            id = wormholeId++,
+            fromSystemId = idA,
+            toSystemId = idB
+        };
+
+        wormholes.Add(link);
+        return true;
     }
 
     /// <summary>
-    /// Builds the wormhole network using a per-system neighbour count
-    /// derived from neighbourCountByRadius and then enforces full connectivity.
+    /// Builds all ID-based dictionaries and adjacency lists from the current systems/wormholes lists.
+    /// Call this after loading or manually editing the lists in the inspector.
     /// </summary>
-    private void BuildWormholeNetwork()
+    public void RebuildLookups()
     {
-        int count = systems.Count;
-        if (count == 0)
-            return;
+        SystemsById.Clear();
+        WormholesById.Clear();
+        NeighborsBySystemId.Clear();
 
-        // Clear any existing links.
-        for (int i = 0; i < count; i++)
+        foreach (var system in systems)
         {
-            systems[i].wormholeLinks.Clear();
+            SystemsById[system.id] = system;
+            if (!NeighborsBySystemId.ContainsKey(system.id))
+                NeighborsBySystemId[system.id] = new List<int>();
         }
 
-        // Compute max radius from origin for normalization.
-        float maxRadius = 0f;
-        for (int i = 0; i < count; i++)
+        foreach (var wormhole in wormholes)
         {
-            var pos = systems[i].position;
-            float radius = new Vector2(pos.x - GalaxyOrigin.x, pos.z - GalaxyOrigin.z).magnitude;
-            if (radius > maxRadius)
-                maxRadius = radius;
-        }
+            WormholesById[wormhole.id] = wormhole;
 
-        // Primary neighbour pass.
-        for (int i = 0; i < count; i++)
-        {
-            var a = systems[i];
+            if (!NeighborsBySystemId.ContainsKey(wormhole.fromSystemId))
+                NeighborsBySystemId[wormhole.fromSystemId] = new List<int>();
 
-            // Determine how many neighbours this system should try to have.
-            float radius = new Vector2(a.position.x - GalaxyOrigin.x, a.position.z - GalaxyOrigin.z).magnitude;
-            float t = (maxRadius > 0f) ? Mathf.Clamp01(radius / maxRadius) : 0f;
+            if (!NeighborsBySystemId.ContainsKey(wormhole.toSystemId))
+                NeighborsBySystemId[wormhole.toSystemId] = new List<int>();
 
-            float curveValue = neighbourCountByRadius != null
-                ? Mathf.Clamp01(neighbourCountByRadius.Evaluate(t))
-                : 1f;
+            if (!NeighborsBySystemId[wormhole.fromSystemId].Contains(wormhole.toSystemId))
+                NeighborsBySystemId[wormhole.fromSystemId].Add(wormhole.toSystemId);
 
-            float desiredFloat = Mathf.Lerp(minNeighboursPerSystem, maxNeighboursPerSystem, curveValue);
-            int desiredNeighbours = Mathf.Clamp(Mathf.RoundToInt(desiredFloat), minNeighboursPerSystem, maxNeighboursPerSystem);
-
-            // Build and sort list of other systems by distance.
-            var indices = new List<int>();
-            for (int j = 0; j < count; j++)
-            {
-                if (j == i) continue;
-                indices.Add(j);
-            }
-
-            indices.Sort((i1, i2) =>
-                Vector3.SqrMagnitude(systems[i1].position - a.position)
-                    .CompareTo(Vector3.SqrMagnitude(systems[i2].position - a.position)));
-
-            int limit = Mathf.Min(desiredNeighbours, indices.Count);
-            for (int k = 0; k < limit; k++)
-            {
-                AddWormhole(i, indices[k]);
-            }
-        }
-
-        // Ensure full connectivity (single component graph).
-        var visited = new HashSet<int>();
-        DepthFirstSearch(0, visited);
-
-        if (visited.Count < count)
-        {
-            var visitedList = new List<int>(visited);
-            for (int i = 0; i < count; i++)
-            {
-                if (visited.Contains(i)) continue;
-
-                int existingIndex = visitedList[Random.Range(0, visitedList.Count)];
-                AddWormhole(i, existingIndex);
-
-                DepthFirstSearch(i, visited);
-                visitedList = new List<int>(visited);
-            }
+            if (!NeighborsBySystemId[wormhole.toSystemId].Contains(wormhole.fromSystemId))
+                NeighborsBySystemId[wormhole.toSystemId].Add(wormhole.fromSystemId);
         }
     }
 
-    private void AddWormhole(int aIndex, int bIndex)
+    #region Public ID helpers
+
+    public bool TryGetSystem(int systemId, out SystemNode node)
     {
-        if (aIndex == bIndex) return;
-
-        var a = systems[aIndex];
-        var b = systems[bIndex];
-
-        if (!a.wormholeLinks.Contains(bIndex)) a.wormholeLinks.Add(bIndex);
-        if (!b.wormholeLinks.Contains(aIndex)) b.wormholeLinks.Add(aIndex);
+        return SystemsById.TryGetValue(systemId, out node);
     }
 
-    private void DepthFirstSearch(int index, HashSet<int> visited)
+    public bool TryGetWormhole(int wormholeId, out WormholeLink link)
     {
-        if (visited.Contains(index)) return;
-        visited.Add(index);
-
-        var sys = systems[index];
-        foreach (int neighbourIndex in sys.wormholeLinks)
-        {
-            DepthFirstSearch(neighbourIndex, visited);
-        }
+        return WormholesById.TryGetValue(wormholeId, out link);
     }
 
-    public StarSystemData GetStartSystem()
+    /// <summary>
+    /// Returns read-only neighbors (by system ID) of the given system ID.
+    /// Returns an empty list if none exist.
+    /// </summary>
+    public IReadOnlyList<int> GetNeighbors(int systemId)
     {
-        foreach (var sys in systems)
-        {
-            if (sys.role == SystemRole.Start)
-                return sys;
-        }
-        // Fallback: any system
-        return systems.Count > 0 ? systems[0] : null;
+        if (NeighborsBySystemId.TryGetValue(systemId, out var list))
+            return list;
+
+        return Array.Empty<int>();
     }
 
-    public StarSystemData GetSystem(int id)
-    {
-        if (id < 0 || id >= systems.Count) return null;
-        return systems[id];
-    }
-
-    public void DiscoverSystem(int id)
-    {
-        var sys = GetSystem(id);
-        if (sys != null)
-            sys.discovered = true;
-    }
-
-#if UNITY_EDITOR
-    // Optional: draw gizmos in the Scene view to visualise the graph.
-    private void OnDrawGizmosSelected()
-    {
-        if (systems == null || systems.Count == 0) return;
-
-        foreach (var sys in systems)
-        {
-            Gizmos.color = sys.role == SystemRole.Start ? Color.cyan :
-                           sys.role == SystemRole.Solar ? Color.yellow :
-                           Color.white;
-            Gizmos.DrawSphere(sys.position, 4f);
-
-            Gizmos.color = Color.magenta;
-            foreach (int n in sys.wormholeLinks)
-            {
-                if (n < 0 || n >= systems.Count) continue;
-                Gizmos.DrawLine(sys.position, systems[n].position);
-            }
-        }
-    }
-#endif
+    #endregion
 }

@@ -1,49 +1,56 @@
-using System;
 using System.Collections.Generic;
 using UnityEngine;
+using TMPro;
 
 /// <summary>
-/// Boots the game and manages system-level state:
-/// - Chooses a Horizon start system
-/// - Spawns the player near a wormhole gate in that system
-/// - Spawns wormhole gates for the current system, oriented toward their target systems
-/// - Handles jumps between systems
-/// - Notifies listeners when galaxy state changes (for UI refresh)
+/// High-level game coordinator:
+/// - Keeps references to GalaxyGenerator, GameDiscoveryState, and the map
+/// - Bridges current-system changes into simple UI (current system label)
+/// - Spawns the player ship prefab once if needed
+/// - Spawns wormhole gate instances for the current system
+///
+/// Starting system is defined only in GameDiscoveryState (no duplication here).
 /// </summary>
 public class GameManager : MonoBehaviour
 {
     public static GameManager Instance { get; private set; }
 
-    /// <summary>
-    /// Raised whenever the player's galaxy-related state changes in a way
-    /// that should be reflected in UI (e.g. current system, discovery).
-    /// </summary>
-    public static event Action OnGalaxyStateChanged;
+    [Header("Core References")]
+    [SerializeField] private GalaxyGenerator galaxy;
+    [SerializeField] private GameDiscoveryState discoveryState;
+    [SerializeField] private GalaxyMapUIManager galaxyMapUI;
 
-    [Header("References")]
-    public GalaxyGenerator galaxy;
-    public GameObject playerShipPrefab;
-    public GameObject wormholeGatePrefab;
+    [Header("UI")]
+    [SerializeField] private TMP_Text currentSystemLabel;
 
-    [Header("Spawn Settings")]
-    [Tooltip("Default distance from a system centre where the player spawns if no gate is available.")]
-    public float startDistanceFromStar = 60f;
+    [Header("Player Ship")]
+    [Tooltip("Prefab of the player ship to spawn at game start if no existing ship is found.")]
+    [SerializeField] private GameObject playerShipPrefab;
 
-    [Tooltip("Distance from a wormhole gate where the player appears when spawning near it.")]
-    public float playerSpawnDistanceFromGate = 40f;
+    [Tooltip("Optional spawn point for the player ship. If null, the ship spawns at world origin.")]
+    [SerializeField] private Transform playerSpawnPoint;
 
-    [Header("Wormhole Gate Placement")]
-    [Tooltip("Radius around a system where wormhole gates are placed.")]
-    public float gateRingRadius = 200f;
+    [Tooltip("Tag used to find an existing player ship in the scene before spawning a new one.")]
+    [SerializeField] private string playerShipTag = "PlayerShip";
 
-    [Header("Runtime")]
-    [Tooltip("ID of the star system the player is currently in.")]
-    public int currentSystemId = -1;
+    [Header("Wormhole Gates")]
+    [Tooltip("Prefab for wormhole gates that will be spawned for each connection from the current system.")]
+    [SerializeField] private WormholeGate wormholeGatePrefab;
 
-    private GameObject playerInstance;
+    [Tooltip("Optional parent transform for spawned wormhole gates.")]
+    [SerializeField] private Transform wormholeGatesParent;
+
+    [Tooltip("Radius around the origin at which to place wormhole gates for the current system.")]
+    [SerializeField] private float gateRingRadius = 50f;
+
+    [Tooltip("World-space center used for placing gate ring. If null, Vector3.zero is used.")]
+    [SerializeField] private Transform gateRingCenter;
+
+    private GameObject playerShipInstance;
     private readonly List<WormholeGate> activeGates = new List<WormholeGate>();
 
-    public Transform PlayerTransform => playerInstance != null ? playerInstance.transform : null;
+    public int CurrentSystemId => discoveryState != null ? discoveryState.CurrentSystemId : -1;
+    public GameObject PlayerShip => playerShipInstance;
 
     private void Awake()
     {
@@ -52,286 +59,234 @@ public class GameManager : MonoBehaviour
             Destroy(gameObject);
             return;
         }
+
         Instance = this;
-        // Optionally persist across scenes:
-        // DontDestroyOnLoad(gameObject);
+        DontDestroyOnLoad(gameObject);
     }
 
     private void Start()
     {
         if (galaxy == null)
+            galaxy = GalaxyGenerator.Instance;
+
+        if (discoveryState == null)
+            discoveryState = GameDiscoveryState.Instance;
+
+        if (galaxyMapUI == null)
+            galaxyMapUI = GalaxyMapUIManager.Instance;
+
+        if (discoveryState != null)
         {
-            Debug.LogError("GameManager: Galaxy reference not assigned.");
+            discoveryState.CurrentSystemChanged += OnCurrentSystemChanged;
+        }
+
+        // Ensure we have a ship in the scene
+        SpawnPlayerShipIfNeeded();
+
+        // Initial UI / gates. If discovery state hasn't initialized yet,
+        // this may be -1 and will be corrected when CurrentSystemChanged fires.
+        int systemId = discoveryState != null ? discoveryState.CurrentSystemId : -1;
+        OnCurrentSystemChanged(systemId);
+    }
+
+    private void OnDestroy()
+    {
+        if (discoveryState != null)
+        {
+            discoveryState.CurrentSystemChanged -= OnCurrentSystemChanged;
+        }
+    }
+
+    /// <summary>
+    /// Spawn the player ship once if it doesn't already exist.
+    /// </summary>
+    private void SpawnPlayerShipIfNeeded()
+    {
+        if (playerShipInstance != null)
             return;
-        }
-        if (playerShipPrefab == null)
+
+        GameObject existing = null;
+
+        if (!string.IsNullOrEmpty(playerShipTag))
         {
-            Debug.LogError("GameManager: Player ship prefab not assigned.");
-            return;
-        }
-        if (wormholeGatePrefab == null)
-        {
-            Debug.LogError("GameManager: Wormhole gate prefab not assigned.");
-            return;
-        }
-
-        var startSystem = galaxy.GetStartSystem();
-        if (startSystem == null)
-        {
-            Debug.LogError("GameManager: No start system found.");
-            return;
-        }
-
-        currentSystemId = startSystem.id;
-
-        // Mark the starting system discovered/visited.
-        galaxy.DiscoverSystem(currentSystemId);
-        startSystem.visited = true;
-
-        // Spawn gates first so the player can be placed relative to a gate.
-        SpawnWormholeGates();
-
-        // Spawn player close to a wormhole gate if possible.
-        SpawnPlayerAtSystemStart(currentSystemId);
-
-        RaiseGalaxyStateChanged();
-    }
-
-    /// <summary>
-    /// Spawns the player when the game first starts.
-    /// Prefers spawning near one of the system's wormhole gates.
-    /// </summary>
-    private void SpawnPlayerAtSystemStart(int systemId)
-    {
-        var sys = galaxy.GetSystem(systemId);
-        if (sys == null) return;
-
-        WormholeGate gateForSpawn = activeGates.Count > 0 ? activeGates[0] : null;
-
-        if (gateForSpawn != null)
-        {
-            SpawnPlayerNearGate(gateForSpawn, sys);
-        }
-        else
-        {
-            SpawnPlayerNearSystemCentre(sys);
-        }
-    }
-
-    /// <summary>
-    /// Helper to create or move the player ship instance.
-    /// </summary>
-    private void SpawnOrMovePlayer(Vector3 position, Quaternion rotation)
-    {
-        if (playerInstance == null)
-        {
-            playerInstance = Instantiate(playerShipPrefab, position, rotation);
-        }
-        else
-        {
-            playerInstance.transform.SetPositionAndRotation(position, rotation);
-        }
-    }
-
-    /// <summary>
-    /// Places the player a short distance "inside" the system from a given gate.
-    /// </summary>
-    private void SpawnPlayerNearGate(WormholeGate gate, StarSystemData sys)
-    {
-        if (gate == null) return;
-
-        Vector3 inwardDir;
-
-        if (sys != null)
-        {
-            // Direction from gate back toward the system centre.
-            inwardDir = sys.position - gate.transform.position;
-        }
-        else
-        {
-            inwardDir = -gate.transform.forward;
-        }
-
-        inwardDir.y = 0f;
-        if (inwardDir.sqrMagnitude < 0.0001f)
-            inwardDir = -gate.transform.forward;
-
-        inwardDir.Normalize();
-
-        Vector3 spawnPos = gate.transform.position + inwardDir * playerSpawnDistanceFromGate;
-        Quaternion rot = Quaternion.LookRotation(inwardDir, Vector3.up);
-
-        SpawnOrMovePlayer(spawnPos, rot);
-    }
-
-    /// <summary>
-    /// Fallback spawn near the system centre in a random horizontal direction.
-    /// </summary>
-    private void SpawnPlayerNearSystemCentre(StarSystemData sys)
-    {
-        if (sys == null) return;
-
-        // Random horizontal direction from system centre.
-        Vector3 dir = UnityEngine.Random.onUnitSphere;
-        dir.y = 0f;
-        if (dir.sqrMagnitude < 0.0001f) dir = Vector3.forward;
-        dir.Normalize();
-
-        Vector3 spawnPos = sys.position + dir * startDistanceFromStar;
-        Quaternion rot = Quaternion.LookRotation(sys.position - spawnPos, Vector3.up);
-
-        SpawnOrMovePlayer(spawnPos, rot);
-    }
-
-    /// <summary>
-    /// Spawns wormhole gates around the current system.
-    /// Each gate is placed in the direction of the system it connects to.
-    /// </summary>
-    private void SpawnWormholeGates()
-    {
-        ClearWormholeGates();
-
-        var sys = galaxy.GetSystem(currentSystemId);
-        if (sys == null || wormholeGatePrefab == null) return;
-
-        int linkCount = sys.wormholeLinks.Count;
-        if (linkCount == 0) return;
-
-        Vector3 sysPos = sys.position;
-
-        for (int i = 0; i < linkCount; i++)
-        {
-            int targetId = sys.wormholeLinks[i];
-            var targetSys = galaxy.GetSystem(targetId);
-            if (targetSys == null) continue;
-
-            // Direction on the galaxy map from this system to the target system.
-            Vector3 toTarget = targetSys.position - sysPos;
-            toTarget.y = 0f;
-            if (toTarget.sqrMagnitude < 0.0001f)
-                toTarget = Vector3.forward;
-
-            Vector3 dir = toTarget.normalized;
-
-            Vector3 gatePos = sysPos + dir * gateRingRadius;
-
-            // Gate faces roughly outward toward the target system.
-            Quaternion rot = Quaternion.LookRotation(dir, Vector3.up);
-
-            GameObject gateObj = Instantiate(wormholeGatePrefab, gatePos, rot);
-            var gate = gateObj.GetComponent<WormholeGate>();
-            if (gate != null)
+            try
             {
-                gate.targetSystemId = targetId;
-                activeGates.Add(gate);
+                existing = GameObject.FindGameObjectWithTag(playerShipTag);
             }
+            catch
+            {
+                // Tag might not exist; ignore and fall through to prefab spawn.
+            }
+        }
+
+        if (existing != null)
+        {
+            playerShipInstance = existing;
+            return;
+        }
+
+        if (playerShipPrefab == null)
+            return;
+
+        Vector3 spawnPos = Vector3.zero;
+        Quaternion spawnRot = Quaternion.identity;
+
+        if (playerSpawnPoint != null)
+        {
+            spawnPos = playerSpawnPoint.position;
+            spawnRot = playerSpawnPoint.rotation;
+        }
+
+        playerShipInstance = Instantiate(playerShipPrefab, spawnPos, spawnRot);
+    }
+
+    /// <summary>
+    /// Called whenever the authoritative current system changes in GameDiscoveryState.
+    /// Updates the UI label and rebuilds wormhole gates for that system.
+    /// </summary>
+    private void OnCurrentSystemChanged(int systemId)
+    {
+        UpdateCurrentSystemLabel(systemId);
+        BuildWormholeGatesForSystem(systemId);
+    }
+
+    private void UpdateCurrentSystemLabel(int systemId)
+    {
+        if (currentSystemLabel == null)
+            return;
+
+        if (systemId < 0 || galaxy == null)
+        {
+            currentSystemLabel.text = string.Empty;
+            return;
+        }
+
+        if (galaxy.TryGetSystem(systemId, out var node) && !string.IsNullOrEmpty(node.displayName))
+        {
+            currentSystemLabel.text = node.displayName;
+        }
+        else
+        {
+            currentSystemLabel.text = $"System {systemId}";
         }
     }
 
     private void ClearWormholeGates()
     {
-        foreach (var gate in activeGates)
+        for (int i = 0; i < activeGates.Count; i++)
         {
-            if (gate != null)
-                Destroy(gate.gameObject);
+            if (activeGates[i] != null)
+            {
+                Destroy(activeGates[i].gameObject);
+            }
         }
+
         activeGates.Clear();
     }
 
     /// <summary>
-    /// Returns the nearest active gate to the given position, within maxDistance.
-    /// Returns null if none are in range.
+    /// Spawn wormhole gates for every neighbor of the given system ID.
+    /// Each gate is tied to the wormhole link ID that connects to that neighbor.
     /// </summary>
-    public WormholeGate FindNearestGate(Vector3 position, float maxDistance)
+    private void BuildWormholeGatesForSystem(int systemId)
     {
-        WormholeGate best = null;
-        float maxSqr = maxDistance * maxDistance;
+        ClearWormholeGates();
 
-        foreach (var gate in activeGates)
+        if (galaxy == null || systemId < 0)
+            return;
+
+        var neighbors = galaxy.GetNeighbors(systemId);
+        if (neighbors == null || neighbors.Count == 0)
+            return;
+
+        if (wormholeGatePrefab == null)
+            return;
+
+        Vector3 center = gateRingCenter != null ? gateRingCenter.position : Vector3.zero;
+        int count = neighbors.Count;
+        float angleStep = 360f / Mathf.Max(1, count);
+
+        for (int i = 0; i < count; i++)
         {
-            if (gate == null) continue;
+            int neighborId = neighbors[i];
 
-            float sqr = (gate.transform.position - position).sqrMagnitude;
-            if (sqr <= maxSqr)
-            {
-                maxSqr = sqr;
-                best = gate;
-            }
+            // Find the wormhole that connects systemId <-> neighborId
+            int wormholeId = FindWormholeIdBetween(systemId, neighborId);
+
+            float angleDeg = i * angleStep;
+            float angleRad = angleDeg * Mathf.Deg2Rad;
+
+            Vector3 offset = new Vector3(Mathf.Cos(angleRad), 0f, Mathf.Sin(angleRad)) * gateRingRadius;
+            Vector3 gatePos = center + offset;
+
+            Quaternion gateRot = Quaternion.LookRotation((center - gatePos).normalized, Vector3.up);
+
+            WormholeGate gateInstance = Instantiate(wormholeGatePrefab, gatePos, gateRot, wormholeGatesParent);
+            gateInstance.SetWormholeId(wormholeId);
+            gateInstance.SetExplicitTargetSystemId(neighborId);
+
+            activeGates.Add(gateInstance);
         }
-
-        return best;
     }
 
     /// <summary>
-    /// Returns a gate in the current system that leads to the given system id, if any.
+    /// Brute-force search for the wormhole link ID connecting two systems.
+    /// Returns -1 if no link is found.
     /// </summary>
-    public WormholeGate FindGateLeadingToSystem(int systemId)
+    private int FindWormholeIdBetween(int systemAId, int systemBId)
     {
-        foreach (var gate in activeGates)
+        if (galaxy == null || galaxy.Wormholes == null)
+            return -1;
+
+        for (int i = 0; i < galaxy.Wormholes.Count; i++)
         {
-            if (gate != null && gate.targetSystemId == systemId)
-                return gate;
+            var w = galaxy.Wormholes[i];
+            if (w.IsIncidentTo(systemAId) && w.GetOtherSystem(systemAId) == systemBId)
+            {
+                return w.id;
+            }
         }
-        return null;
+
+        return -1;
+    }
+
+    #region Public helpers for other scripts
+
+    /// <summary>
+    /// Set the player's current system. This will:
+    /// - Update GameDiscoveryState (system + connected wormholes)
+    /// - Notify listeners (map, UI, gates, etc.)
+    /// </summary>
+    public void SetCurrentSystem(int systemId)
+    {
+        if (discoveryState != null)
+        {
+            discoveryState.SetCurrentSystem(systemId);
+        }
     }
 
     /// <summary>
-    /// Performs a jump for a given ship through a specific gate.
-    /// Player ships spawn near the gate in the destination system that leads back
-    /// to the system they came from (if such a gate exists).
+    /// Mark a system as discovered without moving the player there.
     /// </summary>
-    public void JumpShipToSystem(ShipWormholeNavigator ship, WormholeGate sourceGate)
+    public void DiscoverSystem(int systemId)
     {
-        if (ship == null || galaxy == null || sourceGate == null)
-            return;
-
-        int targetSystemId = sourceGate.targetSystemId;
-        var targetSys = galaxy.GetSystem(targetSystemId);
-        if (targetSys == null)
-            return;
-
-        if (ship.isPlayerControlled)
+        if (discoveryState != null)
         {
-            int fromSystemId = currentSystemId;
-
-            currentSystemId = targetSystemId;
-
-            galaxy.DiscoverSystem(targetSystemId);
-            targetSys.visited = true;
-
-            // Build gates for the target system first so we can find the one pointing back.
-            SpawnWormholeGates();
-
-            // Try to position the player near the gate that leads back to the previous system.
-            WormholeGate exitGate = FindGateLeadingToSystem(fromSystemId);
-
-            if (exitGate != null)
-            {
-                SpawnPlayerNearGate(exitGate, targetSys);
-            }
-            else
-            {
-                SpawnPlayerNearSystemCentre(targetSys);
-            }
-
-            RaiseGalaxyStateChanged();
-        }
-        else
-        {
-            // NPC: simple behaviour, just move the ship near the target system's centre.
-            Vector3 dir = UnityEngine.Random.onUnitSphere;
-            dir.y = 0f;
-            if (dir.sqrMagnitude < 0.0001f) dir = Vector3.forward;
-            dir.Normalize();
-
-            Vector3 spawnPos = targetSys.position + dir * startDistanceFromStar;
-            ship.transform.position = spawnPos;
-            ship.transform.LookAt(targetSys.position);
+            discoveryState.DiscoverSystem(systemId);
         }
     }
 
-    private void RaiseGalaxyStateChanged()
+    /// <summary>
+    /// Mark a wormhole and both of its endpoint systems as discovered.
+    /// Use this when a wormhole is scanned or traversed.
+    /// </summary>
+    public void DiscoverWormholeAndEndpoints(int wormholeId)
     {
-        OnGalaxyStateChanged?.Invoke();
+        if (discoveryState != null)
+        {
+            discoveryState.DiscoverWormholeAndEndpoints(wormholeId);
+        }
     }
+
+    #endregion
 }

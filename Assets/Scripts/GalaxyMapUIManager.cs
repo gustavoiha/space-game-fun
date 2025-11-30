@@ -1,311 +1,395 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
-using UnityEngine.InputSystem;
-using TMPro;
+using UnityEngine.InputSystem;   // New Input System
 
 /// <summary>
-/// Galaxy map UI overlay.
-/// - Reads logical systems from GalaxyGenerator
-/// - Shows only discovered systems (unless debug flag is enabled)
-/// - Highlights current system and shows its name
-/// - Renders UI lines between discovered systems that are connected by wormholes
-/// - Toggle with M (new Input System)
-/// - Automatically refreshes when galaxy state changes
+/// Draws the 2D galaxy map and colors systems/wormholes based on GameDiscoveryState.
+/// Also controls opening/closing the map via an input action (e.g. M key).
 /// </summary>
 public class GalaxyMapUIManager : MonoBehaviour
 {
+    public static GalaxyMapUIManager Instance { get; private set; }
+
     [Header("References")]
-    public GalaxyGenerator galaxy;
-    public RectTransform mapPanel;            // child of a Canvas
-    public GameObject iconPrefab;             // prefab with Image + RectTransform
-    public GameObject connectionLinePrefab;   // prefab with Image + RectTransform for lines
+    [SerializeField] private GalaxyGenerator galaxy;
 
-    [Header("Input")]
-    public Key toggleKey = Key.M;
+    [Tooltip("Root GameObject of the map UI (panel/canvas). This will be enabled/disabled when opening/closing the map.")]
+    [SerializeField] private GameObject mapRoot;
 
-    [Header("Debug")]
-    public bool showUndiscoveredAsUnknown = false;
+    [SerializeField] private RectTransform mapContentRect;
 
-    [Header("Current System UI")]
-    public TextMeshProUGUI currentSystemLabel;   // label for current system
-    public Color currentSystemHighlightColor = Color.white;
-    public float currentSystemIconScale = 1.4f;
+    [Tooltip("Prefab for system icons on the map. Should contain an Image.")]
+    [SerializeField] private RectTransform systemIconPrefab;
 
-    [Header("Connection Line UI")]
-    [Tooltip("Thickness of the connection lines in UI units.")]
-    public float lineThickness = 2f;
+    [Tooltip("Prefab or component used to draw wormhole lines (e.g. an Image-based line).")]
+    [SerializeField] private Image wormholeLinePrefab;
 
-    [Tooltip("Base color of connection lines.")]
-    public Color lineColor = new Color(1f, 1f, 1f, 0.3f);
+    [Header("Visuals")]
+    [SerializeField] private Color undiscoveredColor = Color.black;
+    [SerializeField] private Color discoveredColor = Color.white;
+    [SerializeField] private Color currentSystemColor = Color.cyan;
 
-    [Header("Layout")]
-    [Tooltip("Extra padding added around the outermost systems when fitting them into the map.")]
-    [Range(0f, 0.5f)]
-    public float boundsPaddingFraction = 0.05f;
+    [Header("Map Toggle (New Input System)")]
+    [Tooltip("Input action used to toggle the map (bind this to the M key in your Input Actions asset).")]
+    [SerializeField] private InputActionReference toggleMapAction;
 
-    private bool mapVisible = false;
+    [Tooltip("Whether the map should start open when the scene loads.")]
+    [SerializeField] private bool openOnStart = false;
 
-    private readonly List<GameObject> iconInstances = new List<GameObject>();
-    private readonly List<GameObject> lineInstances = new List<GameObject>();
-    private readonly Dictionary<int, RectTransform> iconBySystemId = new Dictionary<int, RectTransform>();
+    private bool isOpen;
+
+    private readonly Dictionary<int, RectTransform> systemIconsById = new Dictionary<int, RectTransform>();
+    private readonly List<Image> wormholeLines = new List<Image>();
+    private readonly Dictionary<int, Image> wormholeLinesById = new Dictionary<int, Image>();
+
+    private Vector2 minPos;
+    private Vector2 maxPos;
+
+    private GameDiscoveryState discovery;
+
+    private void Awake()
+    {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
+
+        Instance = this;
+
+        // Default mapRoot to this object or the rect's root if not assigned
+        if (mapRoot == null)
+        {
+            if (mapContentRect != null)
+                mapRoot = mapContentRect.root.gameObject;
+            else
+                mapRoot = gameObject;
+        }
+
+        isOpen = openOnStart;
+        if (mapRoot != null)
+        {
+            mapRoot.SetActive(isOpen);
+        }
+    }
 
     private void OnEnable()
     {
-        GameManager.OnGalaxyStateChanged += HandleGalaxyStateChanged;
+        if (toggleMapAction != null)
+        {
+            toggleMapAction.action.performed += OnToggleMapPerformed;
+            toggleMapAction.action.Enable();
+        }
     }
 
     private void OnDisable()
     {
-        GameManager.OnGalaxyStateChanged -= HandleGalaxyStateChanged;
+        if (toggleMapAction != null)
+        {
+            toggleMapAction.action.performed -= OnToggleMapPerformed;
+            toggleMapAction.action.Disable();
+        }
     }
 
     private void Start()
     {
-        if (mapPanel != null)
-            mapPanel.gameObject.SetActive(false);
-    }
-
-    private void Update()
-    {
-        Keyboard kb = Keyboard.current;
-        if (kb == null) return;
-
-        if (kb[toggleKey].wasPressedThisFrame)
+        if (galaxy == null)
         {
-            ToggleMap();
+            galaxy = GalaxyGenerator.Instance;
+        }
+
+        discovery = GameDiscoveryState.Instance;
+
+        if (discovery != null)
+        {
+            discovery.DiscoveryChanged += HandleDiscoveryChanged;
+            discovery.CurrentSystemChanged += HandleCurrentSystemChanged;
+        }
+
+        if (isOpen)
+        {
+            BuildMap();
+            RefreshVisuals();
         }
     }
 
-    private void ToggleMap()
+    private void OnDestroy()
     {
-        mapVisible = !mapVisible;
-
-        if (mapPanel != null)
-            mapPanel.gameObject.SetActive(mapVisible);
-
-        if (mapVisible)
+        if (discovery != null)
         {
-            CreateIconsAndLines();
+            discovery.DiscoveryChanged -= HandleDiscoveryChanged;
+            discovery.CurrentSystemChanged -= HandleCurrentSystemChanged;
         }
     }
 
-    private void HandleGalaxyStateChanged()
+    private void OnToggleMapPerformed(InputAction.CallbackContext ctx)
     {
-        if (!mapVisible)
-            return;
-
-        CreateIconsAndLines();
-    }
-
-    private void ClearVisuals()
-    {
-        foreach (var icon in iconInstances)
-        {
-            if (icon != null) Destroy(icon);
-        }
-        iconInstances.Clear();
-
-        foreach (var line in lineInstances)
-        {
-            if (line != null) Destroy(line);
-        }
-        lineInstances.Clear();
-
-        iconBySystemId.Clear();
+        ToggleMap();
     }
 
     /// <summary>
-    /// Creates/refreshes the icons and connection lines for the galaxy map.
-    /// Automatically infers the galaxy extents from the positions of the systems
-    /// we intend to display, instead of relying on a fixed galaxySize.
+    /// Toggle map visibility. Can be called by input or UI.
     /// </summary>
-    private void CreateIconsAndLines()
+    public void ToggleMap()
     {
-        if (galaxy == null || mapPanel == null || iconPrefab == null)
+        if (mapRoot == null)
             return;
 
-        ClearVisuals();
+        isOpen = !isOpen;
+        mapRoot.SetActive(isOpen);
 
-        var systems = galaxy.Systems;
-        if (systems == null || systems.Count == 0) return;
-
-        // Collect systems that should be visible on the map.
-        List<StarSystemData> visibleSystems = new List<StarSystemData>();
-        foreach (var sys in systems)
+        if (isOpen)
         {
-            bool visible = sys.discovered || showUndiscoveredAsUnknown;
-            if (visible)
-                visibleSystems.Add(sys);
+            BuildMap();
+            RefreshVisuals();
         }
+    }
 
-        if (visibleSystems.Count == 0)
-        {
-            // Nothing to render yet.
-            if (currentSystemLabel != null)
-                currentSystemLabel.text = "Current System: Unknown";
+    /// <summary>
+    /// Open the map if it is closed.
+    /// </summary>
+    public void OpenMap()
+    {
+        if (!isOpen)
+            ToggleMap();
+    }
+
+    /// <summary>
+    /// Close the map if it is open.
+    /// </summary>
+    public void CloseMap()
+    {
+        if (isOpen)
+            ToggleMap();
+    }
+
+    /// <summary>
+    /// Rebuilds all system icons and wormhole lines from the current galaxy data.
+    /// </summary>
+    public void BuildMap()
+    {
+        ClearMap();
+
+        if (galaxy == null || galaxy.Systems == null || galaxy.Systems.Count == 0)
             return;
+
+        ComputeGalaxyBounds();
+        CreateSystemIcons();
+        CreateWormholeLines();
+
+        RefreshVisuals();
+    }
+
+    private void ClearMap()
+    {
+        foreach (var icon in systemIconsById.Values)
+        {
+            if (icon != null)
+                Destroy(icon.gameObject);
         }
 
-        // Compute bounds (XZ) of visible systems.
-        float minX = float.MaxValue, maxX = float.MinValue;
-        float minZ = float.MaxValue, maxZ = float.MinValue;
+        systemIconsById.Clear();
 
-        foreach (var sys in visibleSystems)
+        foreach (var line in wormholeLines)
         {
-            Vector3 p = sys.position;
-            if (p.x < minX) minX = p.x;
-            if (p.x > maxX) maxX = p.x;
-            if (p.z < minZ) minZ = p.z;
-            if (p.z > maxZ) maxZ = p.z;
+            if (line != null)
+                Destroy(line.gameObject);
         }
 
-        // Compute center and max extent, then fit that into the panel.
-        float centerX = 0.5f * (minX + maxX);
-        float centerZ = 0.5f * (minZ + maxZ);
+        wormholeLines.Clear();
+        wormholeLinesById.Clear();
+    }
 
-        float extentX = Mathf.Max(Mathf.Abs(maxX - centerX), Mathf.Abs(centerX - minX));
-        float extentZ = Mathf.Max(Mathf.Abs(maxZ - centerZ), Mathf.Abs(centerZ - minZ));
-        float halfExtent = Mathf.Max(extentX, extentZ);
+    private void ComputeGalaxyBounds()
+    {
+        minPos = new Vector2(float.MaxValue, float.MaxValue);
+        maxPos = new Vector2(float.MinValue, float.MinValue);
 
-        if (halfExtent < 1f)
-            halfExtent = 1f;
-
-        // Apply a small padding so icons are not stuck to the edges.
-        halfExtent *= (1f + boundsPaddingFraction);
-
-        int currentId = -1;
-        if (GameManager.Instance != null)
-            currentId = GameManager.Instance.currentSystemId;
-
-        // --- Create icons for systems ---
-        foreach (var sys in visibleSystems)
+        foreach (var system in galaxy.Systems)
         {
-            Vector3 p = sys.position;
+            minPos = Vector2.Min(minPos, system.position);
+            maxPos = Vector2.Max(maxPos, system.position);
+        }
 
-            // Normalized in [-1, 1] relative to inferred bounds.
-            float normX = (p.x - centerX) / halfExtent;
-            float normY = (p.z - centerZ) / halfExtent;
+        // Avoid zero-size bounds
+        if (Mathf.Approximately(minPos.x, maxPos.x))
+        {
+            maxPos.x = minPos.x + 1f;
+        }
 
-            float x = normX * (mapPanel.rect.width * 0.5f);
-            float y = normY * (mapPanel.rect.height * 0.5f);
+        if (Mathf.Approximately(minPos.y, maxPos.y))
+        {
+            maxPos.y = minPos.y + 1f;
+        }
+    }
 
-            GameObject iconGO = Instantiate(iconPrefab, mapPanel);
-            var rt = iconGO.GetComponent<RectTransform>();
-            rt.anchoredPosition = new Vector2(x, y);
+    private void CreateSystemIcons()
+    {
+        foreach (var system in galaxy.Systems)
+        {
+            var icon = Instantiate(systemIconPrefab, mapContentRect);
+            icon.anchoredPosition = GalaxyToMapPosition(system.position);
+            icon.name = $"SystemIcon_{system.id}";
 
-            var img = iconGO.GetComponent<Image>();
-            if (img != null)
+            systemIconsById[system.id] = icon;
+        }
+    }
+
+    private void CreateWormholeLines()
+    {
+        foreach (var wormhole in galaxy.Wormholes)
+        {
+            if (!galaxy.SystemsById.TryGetValue(wormhole.fromSystemId, out var fromSystem) ||
+                !galaxy.SystemsById.TryGetValue(wormhole.toSystemId, out var toSystem))
             {
-                Color baseColor = GetFactionColor(sys.faction);
-
-                if (sys.id == currentId)
-                {
-                    baseColor = currentSystemHighlightColor;
-                    rt.sizeDelta = rt.sizeDelta * currentSystemIconScale;
-                }
-
-                img.color = baseColor;
+                continue;
             }
 
-            iconInstances.Add(iconGO);
-            iconBySystemId[sys.id] = rt;
+            var line = Instantiate(wormholeLinePrefab, mapContentRect);
+            line.name = $"Wormhole_{wormhole.id}";
+
+            Vector2 fromPos = GalaxyToMapPosition(fromSystem.position);
+            Vector2 toPos = GalaxyToMapPosition(toSystem.position);
+
+            RectTransform rt = line.rectTransform;
+            Vector2 midPoint = (fromPos + toPos) * 0.5f;
+            rt.anchoredPosition = midPoint;
+
+            Vector2 dir = (toPos - fromPos);
+            float length = dir.magnitude;
+            rt.sizeDelta = new Vector2(length, rt.sizeDelta.y);
+            float angle = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg;
+            rt.localRotation = Quaternion.Euler(0f, 0f, angle);
+
+            wormholeLines.Add(line);
+            wormholeLinesById[wormhole.id] = line;
         }
+    }
 
-        // --- Create connection lines between discovered systems ---
-        CreateConnectionLines();
+    private Vector2 GalaxyToMapPosition(Vector2 galaxyPos)
+    {
+        Vector2 normalized = new Vector2(
+            Mathf.InverseLerp(minPos.x, maxPos.x, galaxyPos.x),
+            Mathf.InverseLerp(minPos.y, maxPos.y, galaxyPos.y)
+        );
 
-        // --- Update label ---
-        if (currentSystemLabel != null)
+        Vector2 size = mapContentRect.rect.size;
+
+        // Centered in rect
+        Vector2 anchored = new Vector2(
+            (normalized.x - 0.5f) * size.x,
+            (normalized.y - 0.5f) * size.y
+        );
+
+        return anchored;
+    }
+
+    /// <summary>
+    /// Backwards-compatible wrapper.
+    /// Prefer calling GameDiscoveryState.Instance.SetCurrentSystem directly.
+    /// </summary>
+    public void SetCurrentSystem(int systemId)
+    {
+        if (GameDiscoveryState.Instance != null)
         {
-            if (currentId >= 0)
+            GameDiscoveryState.Instance.SetCurrentSystem(systemId);
+        }
+    }
+
+    /// <summary>
+    /// Backwards-compatible wrapper.
+    /// Prefer calling GameDiscoveryState.Instance.DiscoverSystem directly.
+    /// </summary>
+    public void DiscoverSystem(int systemId)
+    {
+        if (GameDiscoveryState.Instance != null)
+        {
+            GameDiscoveryState.Instance.DiscoverSystem(systemId);
+        }
+    }
+
+    /// <summary>
+    /// Backwards-compatible wrapper.
+    /// Prefer calling GameDiscoveryState.Instance.DiscoverWormholeAndEndpoints directly.
+    /// </summary>
+    public void DiscoverSystemsAlongWormhole(int wormholeId)
+    {
+        if (GameDiscoveryState.Instance != null)
+        {
+            GameDiscoveryState.Instance.DiscoverWormholeAndEndpoints(wormholeId);
+        }
+    }
+
+    private void RefreshVisuals()
+    {
+        // Systems
+        foreach (var kvp in systemIconsById)
+        {
+            int systemId = kvp.Key;
+            RectTransform icon = kvp.Value;
+            if (icon == null)
+                continue;
+
+            var image = icon.GetComponent<Image>();
+            if (image == null)
+                continue;
+
+            if (discovery == null)
             {
-                var curSys = galaxy.GetSystem(currentId);
-                if (curSys != null)
-                    currentSystemLabel.text = $"Current System: {curSys.displayName}";
-                else
-                    currentSystemLabel.text = "Current System: Unknown";
+                // If there is no discovery state, treat all as discovered.
+                image.color = discoveredColor;
             }
             else
             {
-                currentSystemLabel.text = "Current System: Unknown";
+                if (!discovery.IsSystemDiscovered(systemId))
+                {
+                    image.color = undiscoveredColor;
+                }
+                else if (discovery.CurrentSystemId == systemId)
+                {
+                    image.color = currentSystemColor;
+                }
+                else
+                {
+                    image.color = discoveredColor;
+                }
             }
         }
-    }
 
-    private void CreateConnectionLines()
-    {
-        if (connectionLinePrefab == null || galaxy == null)
-            return;
-
-        var systems = galaxy.Systems;
-        if (systems == null || systems.Count == 0) return;
-
-        // For each discovered system, draw lines to higher-index neighbours
-        // to avoid drawing duplicates (wormholeLinks are symmetric).
-        for (int i = 0; i < systems.Count; i++)
+        // Wormholes
+        foreach (var kvp in wormholeLinesById)
         {
-            var sys = systems[i];
-            if (!sys.discovered && !showUndiscoveredAsUnknown) continue;
-
-            RectTransform rtA;
-            if (!iconBySystemId.TryGetValue(sys.id, out rtA))
+            int wormholeId = kvp.Key;
+            Image lineImage = kvp.Value;
+            if (lineImage == null)
                 continue;
 
-            foreach (int neighbourId in sys.wormholeLinks)
+            if (discovery == null)
             {
-                if (neighbourId <= sys.id) continue; // avoid duplicates and self
-
-                var neighbour = galaxy.GetSystem(neighbourId);
-                if (neighbour == null) continue;
-                if (!neighbour.discovered && !showUndiscoveredAsUnknown)
-                    continue;
-
-                RectTransform rtB;
-                if (!iconBySystemId.TryGetValue(neighbourId, out rtB))
-                    continue;
-
-                Vector2 a = rtA.anchoredPosition;
-                Vector2 b = rtB.anchoredPosition;
-                Vector2 dir = b - a;
-                float length = dir.magnitude;
-                if (length <= 0.001f) continue;
-
-                Vector2 mid = (a + b) * 0.5f;
-                float angle = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg;
-
-                GameObject lineGO = Instantiate(connectionLinePrefab, mapPanel);
-                var lineRT = lineGO.GetComponent<RectTransform>();
-                if (lineRT != null)
-                {
-                    lineRT.anchoredPosition = mid;
-                    lineRT.sizeDelta = new Vector2(length, lineThickness);
-                    lineRT.rotation = Quaternion.Euler(0f, 0f, angle);
-                }
-
-                var img = lineGO.GetComponent<Image>();
-                if (img != null)
-                {
-                    img.color = lineColor;
-                }
-
-                lineInstances.Add(lineGO);
+                lineImage.enabled = true;
+            }
+            else
+            {
+                bool discovered = discovery.IsWormholeDiscovered(wormholeId);
+                lineImage.enabled = discovered;
             }
         }
     }
 
-    private Color GetFactionColor(Faction faction)
+    private void HandleDiscoveryChanged()
     {
-        switch (faction)
+        if (isOpen)
         {
-            case Faction.HorizonInitiative: return new Color(0.4f, 0.8f, 1f);   // teal/blue
-            case Faction.HeliosProtectorate: return new Color(1f, 0.85f, 0.3f); // pale gold
-            case Faction.MyriadCombine: return new Color(0.8f, 0.4f, 1f);
-            case Faction.VerdureHegemony: return new Color(0.5f, 1f, 0.5f);
-            case Faction.AelariConcord: return new Color(0.6f, 0.9f, 1f);
-            case Faction.KarthanAssemblies: return new Color(1f, 0.6f, 0.4f);
-            case Faction.SerathiEnclave: return new Color(0.8f, 0.8f, 1f);
-            default: return Color.white;
+            RefreshVisuals();
+        }
+    }
+
+    private void HandleCurrentSystemChanged(int systemId)
+    {
+        if (isOpen)
+        {
+            RefreshVisuals();
         }
     }
 }
