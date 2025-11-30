@@ -100,13 +100,13 @@ Each task has an ID (e.g. `M1.1`) so tools and humans can reference them unambig
 
 ### M2 – Rendering & Navigation
 
-- **M2.1 – Coordinate Normalization**
+- **M2.1 – Coordinate Normalization (implemented)**
   - Decide a mapping from galaxy world coordinates to 2D map space (e.g. 0–1 or UI pixels).
   - Use the extents from `M1.4` to normalize positions:
     - Maintain aspect ratio.
     - Keep systems inside map bounds.
 
-- **M2.2 – Pannable / Zoomable Map**
+- **M2.2 – Pannable / Zoomable Map (implemented)**
   - Implement pan and zoom controls:
     - Pan via mouse drag and/or WASD/arrow keys.
     - Zoom via mouse scroll.
@@ -114,7 +114,7 @@ Each task has an ID (e.g. `M1.1`) so tools and humans can reference them unambig
     - Dedicated camera rendering a world-space map.
     - UI-based map using RectTransforms with scale/position changes (e.g. within a ScrollRect).
 
-- **M2.3 – Draw Systems & Wormhole Lines**
+- **M2.3 – Draw Systems & Wormhole Lines (implemented)**
   - Render system nodes:
     - Distinct visuals for:
       - Current system.
@@ -127,9 +127,12 @@ Each task has an ID (e.g. `M1.1`) so tools and humans can reference them unambig
     - The current system changes.
   - Drive these updates via `GalaxyState` events from `M0.5`.
 
+- **M2.4 - Zooming on map**
+  - Pivot center of zooming on the map should be the mouse pointer.
+
 ### M2 – Interaction
 
-- **M2.4 – System Selection**
+- **M2.5 – System Selection**
   - Enable clicking on a system node to:
     - Select/highlight it.
     - Open a small info panel showing:
@@ -138,14 +141,14 @@ Each task has an ID (e.g. `M1.1`) so tools and humans can reference them unambig
       - Basic properties (e.g. hazard level, known stations).
   - Clearly indicate the current system (e.g. halo, size difference, color).
 
-- **M2.5 – Wormhole Selection**
+- **M2.6 – Wormhole Selection**
   - Enable selecting wormhole edges:
     - Click on line or a gate icon on the map.
     - Show the two connected systems.
     - Provide a quick button to focus the map camera on the adjacent system.
   - Support the UX pattern: “Click wormhole, see the adjacent star system immediately.”
 
-- **M2.6 – Jump / Navigation from Map**
+- **M2.7 – Jump / Navigation from Map**
   - From the current system, allow:
     - Selecting an adjacent system on the map and issuing a “jump” or “set course” command.
   - Internally:

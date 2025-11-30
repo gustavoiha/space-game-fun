@@ -245,34 +245,33 @@ Assets/
 ### Responsibility
 
 - Renders and manages the **2D galaxy map**:
-  - Displays discovered systems as points / icons.
-  - Draws wormhole connections as lines between systems.
+  - Displays current and discovered systems, plus “frontier” unknown systems that are adjacent to discovered ones.
+  - Draws wormhole connections between discovered systems.
   - Highlights the current system.
-- Provides hooks for zooming, panning, and potentially selecting systems.
+- Handles zooming/panning and recenters on the current system when opened.
 
 ### Core Behaviour
 
 - **Rendering Systems**
-  - Queries `GalaxyGenerator.Systems` and `GameDiscoveryState.discoveredSystemIds`.
-  - Projects 3D positions into map space (e.g., 2D coordinates in a RectTransform).
-  - Instantiates UI elements (icons, labels) for each discovered system.
+  - Queries `GalaxyGenerator.Systems` and `GameDiscoveryState` discovery sets.
+  - Projects positions into map space using generator extents.
+  - Instantiates UI elements for every system, then:
+    - Shows discovered systems and the current system with distinct colors.
+    - Shows undiscovered frontier systems (neighbors of discovered systems) in an “unknown” color.
+    - Hides systems that are neither discovered nor adjacent to a discovered system.
 
 - **Rendering Wormholes**
-  - Queries discovered wormhole links.
-  - Draws lines between system icons using:
-    - UI line rendering (e.g., `LineRenderer` in world-space canvas), or
-    - Procedural generation of `Image`/mesh segments.
+  - Draws UI lines between system icons.
+  - Enables a line only if the wormhole is discovered **and** both endpoint systems are discovered.
 
 - **Current System Highlight**
   - Highlights the icon of `GameDiscoveryState.currentSystemId`.
   - May update a “Current System” label using TextMeshPro.
 
-- **Map Extents**
-  - No longer depends on a single `galaxySize` field.
-  - Either:
-    - Infers map bounds from system positions (min/max of projected coordinates), or
-    - Uses a fixed view area and allows zoom/pan to explore the network.
-  - Designed to support scroll-wheel zoom and drag/pan navigation.
+- **Map Extents & Initial View**
+  - Infers map bounds from generated system positions (min/max extents) to compute a fit scale.
+  - On open/rebuild, applies a configurable initial zoom and recenters the map on the current system.
+  - Supports scroll-wheel zoom and drag/WASD/arrow panning with optional bounds clamping.
 
 - **Discovery Updates**
   - Subscribes to `GameDiscoveryState` events (e.g., `DiscoveryChanged`, `CurrentSystemChanged`).

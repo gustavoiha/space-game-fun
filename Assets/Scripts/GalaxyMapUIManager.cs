@@ -26,9 +26,16 @@ public class GalaxyMapUIManager : MonoBehaviour
     [SerializeField] private Image wormholeLinePrefab;
 
     [Header("Visuals")]
+    [Tooltip("Color for undiscovered frontier systems (neighbors of discovered systems).")]
     [SerializeField] private Color undiscoveredColor = Color.black;
     [SerializeField] private Color discoveredColor = Color.white;
     [SerializeField] private Color currentSystemColor = Color.cyan;
+
+    [Header("Initial View")]
+    [Tooltip("Zoom applied when the map opens or is rebuilt.")]
+    [SerializeField] private float initialZoom = 1.25f;
+    [Tooltip("If true, the map recenters on the current system when opened.")]
+    [SerializeField] private bool focusOnCurrentSystemOnOpen = true;
 
     [Header("Pan & Zoom")]
     [SerializeField] private float minZoom = 0.5f;
@@ -123,7 +130,6 @@ public class GalaxyMapUIManager : MonoBehaviour
         if (isOpen)
         {
             BuildMap();
-            RefreshVisuals();
         }
     }
 
@@ -155,7 +161,6 @@ public class GalaxyMapUIManager : MonoBehaviour
         if (isOpen)
         {
             BuildMap();
-            RefreshVisuals();
         }
     }
 
@@ -187,8 +192,6 @@ public class GalaxyMapUIManager : MonoBehaviour
         if (mapContentRect != null)
         {
             mapContentRect.anchoredPosition = Vector2.zero;
-            currentZoom = 1f;
-            mapContentRect.localScale = Vector3.one;
         }
 
         if (galaxy == null || galaxy.Systems == null || galaxy.Systems.Count == 0)
@@ -198,6 +201,7 @@ public class GalaxyMapUIManager : MonoBehaviour
         CreateSystemIcons();
         CreateWormholeLines();
 
+        ResetViewToCurrentSystem();
         RefreshVisuals();
     }
 
@@ -331,58 +335,8 @@ public class GalaxyMapUIManager : MonoBehaviour
 
     private void RefreshVisuals()
     {
-        // Systems
-        foreach (var kvp in systemIconsById)
-        {
-            int systemId = kvp.Key;
-            RectTransform icon = kvp.Value;
-            if (icon == null)
-                continue;
-
-            var image = icon.GetComponent<Image>();
-            if (image == null)
-                continue;
-
-            if (discovery == null)
-            {
-                // If there is no discovery state, treat all as discovered.
-                image.color = discoveredColor;
-            }
-            else
-            {
-                if (!discovery.IsSystemDiscovered(systemId))
-                {
-                    image.color = undiscoveredColor;
-                }
-                else if (discovery.CurrentSystemId == systemId)
-                {
-                    image.color = currentSystemColor;
-                }
-                else
-                {
-                    image.color = discoveredColor;
-                }
-            }
-        }
-
-        // Wormholes
-        foreach (var kvp in wormholeLinesById)
-        {
-            int wormholeId = kvp.Key;
-            Image lineImage = kvp.Value;
-            if (lineImage == null)
-                continue;
-
-            if (discovery == null)
-            {
-                lineImage.enabled = true;
-            }
-            else
-            {
-                bool discovered = discovery.IsWormholeDiscovered(wormholeId);
-                lineImage.enabled = discovered;
-            }
-        }
+        RefreshSystemVisuals();
+        RefreshWormholeVisuals();
     }
 
     private void HandleDiscoveryChanged()
@@ -410,6 +364,44 @@ public class GalaxyMapUIManager : MonoBehaviour
         HandlePanInput();
     }
 
+    private void ResetViewToCurrentSystem()
+    {
+        if (mapContentRect == null)
+            return;
+
+        ApplyZoom(initialZoom);
+
+        if (focusOnCurrentSystemOnOpen && discovery != null)
+        {
+            FocusOnSystem(discovery.CurrentSystemId);
+        }
+
+        if (clampPanning)
+            ClampPanToBounds();
+    }
+
+    private void ApplyZoom(float targetZoom)
+    {
+        currentZoom = Mathf.Clamp(targetZoom, minZoom, maxZoom);
+        mapContentRect.localScale = Vector3.one * currentZoom;
+    }
+
+    private void FocusOnSystem(int systemId)
+    {
+        if (mapContentRect == null || galaxy == null || systemId < 0)
+            return;
+
+        if (!galaxy.SystemsById.TryGetValue(systemId, out var node))
+            return;
+
+        var parentRect = mapContentRect.parent as RectTransform;
+        if (parentRect == null)
+            return;
+
+        Vector2 mapPos = GalaxyToMapPosition(node.position);
+        mapContentRect.anchoredPosition = -mapPos;
+    }
+
     private void HandleZoomInput()
     {
         var mouse = Mouse.current;
@@ -420,8 +412,7 @@ public class GalaxyMapUIManager : MonoBehaviour
         if (Mathf.Approximately(scroll, 0f))
             return;
 
-        currentZoom = Mathf.Clamp(currentZoom + scroll * zoomSpeed * 0.01f, minZoom, maxZoom);
-        mapContentRect.localScale = Vector3.one * currentZoom;
+        ApplyZoom(currentZoom + scroll * zoomSpeed * 0.01f);
 
         if (clampPanning)
             ClampPanToBounds();
@@ -477,6 +468,92 @@ public class GalaxyMapUIManager : MonoBehaviour
             if (clampPanning)
                 ClampPanToBounds();
         }
+    }
+
+    private void RefreshSystemVisuals()
+    {
+        foreach (var kvp in systemIconsById)
+        {
+            int systemId = kvp.Key;
+            RectTransform icon = kvp.Value;
+            if (icon == null)
+                continue;
+
+            var image = icon.GetComponent<Image>();
+            if (image == null)
+                continue;
+
+            if (discovery == null)
+            {
+                image.color = discoveredColor;
+                icon.gameObject.SetActive(true);
+                continue;
+            }
+
+            bool isCurrent = discovery.CurrentSystemId == systemId;
+            bool isDiscovered = discovery.IsSystemDiscovered(systemId);
+            bool isFrontier = !isDiscovered && IsAdjacentToDiscovered(systemId);
+            bool shouldShow = isDiscovered || isFrontier;
+
+            icon.gameObject.SetActive(shouldShow);
+
+            if (!shouldShow)
+                continue;
+
+            if (isCurrent)
+            {
+                image.color = currentSystemColor;
+            }
+            else if (isDiscovered)
+            {
+                image.color = discoveredColor;
+            }
+            else
+            {
+                image.color = undiscoveredColor;
+            }
+        }
+    }
+
+    private void RefreshWormholeVisuals()
+    {
+        foreach (var kvp in wormholeLinesById)
+        {
+            int wormholeId = kvp.Key;
+            Image lineImage = kvp.Value;
+            if (lineImage == null)
+                continue;
+
+            if (discovery == null || galaxy == null || !galaxy.WormholesById.TryGetValue(wormholeId, out var link))
+            {
+                lineImage.enabled = true;
+                continue;
+            }
+
+            bool endpointsDiscovered = discovery.IsSystemDiscovered(link.fromSystemId) &&
+                                       discovery.IsSystemDiscovered(link.toSystemId);
+            bool wormholeKnown = discovery.IsWormholeDiscovered(wormholeId);
+
+            lineImage.enabled = endpointsDiscovered && wormholeKnown;
+        }
+    }
+
+    private bool IsAdjacentToDiscovered(int systemId)
+    {
+        if (galaxy == null || discovery == null)
+            return false;
+
+        var neighbors = galaxy.GetNeighbors(systemId);
+        if (neighbors == null)
+            return false;
+
+        for (int i = 0; i < neighbors.Count; i++)
+        {
+            if (discovery.IsSystemDiscovered(neighbors[i]))
+                return true;
+        }
+
+        return false;
     }
 
     private void ClampPanToBounds()
