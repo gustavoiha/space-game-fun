@@ -17,9 +17,9 @@ public class GalaxyMapUIManager : MonoBehaviour
 {
     [Header("References")]
     public GalaxyGenerator galaxy;
-    public RectTransform mapPanel;        // child of a Canvas
-    public GameObject iconPrefab;         // prefab with Image + RectTransform
-    public GameObject connectionLinePrefab; // prefab with Image + RectTransform for lines
+    public RectTransform mapPanel;            // child of a Canvas
+    public GameObject iconPrefab;             // prefab with Image + RectTransform
+    public GameObject connectionLinePrefab;   // prefab with Image + RectTransform for lines
 
     [Header("Input")]
     public Key toggleKey = Key.M;
@@ -28,7 +28,7 @@ public class GalaxyMapUIManager : MonoBehaviour
     public bool showUndiscoveredAsUnknown = false;
 
     [Header("Current System UI")]
-    public TextMeshProUGUI currentSystemLabel;   // TextMeshProUGUI for label
+    public TextMeshProUGUI currentSystemLabel;   // label for current system
     public Color currentSystemHighlightColor = Color.white;
     public float currentSystemIconScale = 1.4f;
 
@@ -38,6 +38,11 @@ public class GalaxyMapUIManager : MonoBehaviour
 
     [Tooltip("Base color of connection lines.")]
     public Color lineColor = new Color(1f, 1f, 1f, 0.3f);
+
+    [Header("Layout")]
+    [Tooltip("Extra padding added around the outermost systems when fitting them into the map.")]
+    [Range(0f, 0.5f)]
+    public float boundsPaddingFraction = 0.05f;
 
     private bool mapVisible = false;
 
@@ -110,6 +115,11 @@ public class GalaxyMapUIManager : MonoBehaviour
         iconBySystemId.Clear();
     }
 
+    /// <summary>
+    /// Creates/refreshes the icons and connection lines for the galaxy map.
+    /// Automatically infers the galaxy extents from the positions of the systems
+    /// we intend to display, instead of relying on a fixed galaxySize.
+    /// </summary>
     private void CreateIconsAndLines()
     {
         if (galaxy == null || mapPanel == null || iconPrefab == null)
@@ -120,23 +130,65 @@ public class GalaxyMapUIManager : MonoBehaviour
         var systems = galaxy.Systems;
         if (systems == null || systems.Count == 0) return;
 
-        float halfSize = galaxy.galaxySize * 0.5f;
+        // Collect systems that should be visible on the map.
+        List<StarSystemData> visibleSystems = new List<StarSystemData>();
+        foreach (var sys in systems)
+        {
+            bool visible = sys.discovered || showUndiscoveredAsUnknown;
+            if (visible)
+                visibleSystems.Add(sys);
+        }
+
+        if (visibleSystems.Count == 0)
+        {
+            // Nothing to render yet.
+            if (currentSystemLabel != null)
+                currentSystemLabel.text = "Current System: Unknown";
+            return;
+        }
+
+        // Compute bounds (XZ) of visible systems.
+        float minX = float.MaxValue, maxX = float.MinValue;
+        float minZ = float.MaxValue, maxZ = float.MinValue;
+
+        foreach (var sys in visibleSystems)
+        {
+            Vector3 p = sys.position;
+            if (p.x < minX) minX = p.x;
+            if (p.x > maxX) maxX = p.x;
+            if (p.z < minZ) minZ = p.z;
+            if (p.z > maxZ) maxZ = p.z;
+        }
+
+        // Compute center and max extent, then fit that into the panel.
+        float centerX = 0.5f * (minX + maxX);
+        float centerZ = 0.5f * (minZ + maxZ);
+
+        float extentX = Mathf.Max(Mathf.Abs(maxX - centerX), Mathf.Abs(centerX - minX));
+        float extentZ = Mathf.Max(Mathf.Abs(maxZ - centerZ), Mathf.Abs(centerZ - minZ));
+        float halfExtent = Mathf.Max(extentX, extentZ);
+
+        if (halfExtent < 1f)
+            halfExtent = 1f;
+
+        // Apply a small padding so icons are not stuck to the edges.
+        halfExtent *= (1f + boundsPaddingFraction);
 
         int currentId = -1;
         if (GameManager.Instance != null)
             currentId = GameManager.Instance.currentSystemId;
 
         // --- Create icons for systems ---
-        foreach (var sys in systems)
+        foreach (var sys in visibleSystems)
         {
-            bool visible = sys.discovered || showUndiscoveredAsUnknown;
-            if (!visible) continue;
+            Vector3 p = sys.position;
 
-            float normX = (sys.position.x + halfSize) / galaxy.galaxySize;
-            float normY = (sys.position.z + halfSize) / galaxy.galaxySize;
+            // Normalized in [-1, 1] relative to inferred bounds.
+            float normX = (p.x - centerX) / halfExtent;
+            float normY = (p.z - centerZ) / halfExtent;
 
-            float x = (normX - 0.5f) * mapPanel.rect.width;
-            float y = (normY - 0.5f) * mapPanel.rect.height;
+            float x = normX * (mapPanel.rect.width * 0.5f);
+            float y = normY * (mapPanel.rect.height * 0.5f);
 
             GameObject iconGO = Instantiate(iconPrefab, mapPanel);
             var rt = iconGO.GetComponent<RectTransform>();
@@ -228,7 +280,7 @@ public class GalaxyMapUIManager : MonoBehaviour
                 {
                     lineRT.anchoredPosition = mid;
                     lineRT.sizeDelta = new Vector2(length, lineThickness);
-                    lineRT.localRotation = Quaternion.Euler(0f, 0f, angle);
+                    lineRT.rotation = Quaternion.Euler(0f, 0f, angle);
                 }
 
                 var img = lineGO.GetComponent<Image>();

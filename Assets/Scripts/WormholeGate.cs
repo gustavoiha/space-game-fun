@@ -26,7 +26,8 @@ public class WormholeGate : MonoBehaviour
         if (dist > activationDistance)
             return false;
 
-        GameManager.Instance.JumpShipToSystem(ship, targetSystemId);
+        // Pass the gate itself so the GameManager knows which connection was used.
+        GameManager.Instance.JumpShipToSystem(ship, this);
         return true;
     }
 
