@@ -4,8 +4,8 @@ using UnityEngine;
 
 /// <summary>
 /// Generates a procedural galaxy graph:
-/// - Star systems placed roughly around an average spacing with min/max constraints
-/// - Wormhole connections between systems, with a tunable connections-per-system curve
+/// - Star systems placed using random distances constrained by min/max spacing
+/// - Wormhole connections between systems, with randomized connection counts per system
 ///
 /// Each system and each wormhole has a stable integer ID for this galaxy instance.
 /// Other systems (map, save, gameplay) should reference systems and wormholes by ID.
@@ -17,11 +17,14 @@ public class GalaxyGenerator : MonoBehaviour
     [Header("Generation Settings")]
     [SerializeField] private int targetSystemCount = 40;
 
-    [Tooltip("Average distance between systems in 'galaxy units' (map space).")]
-    [SerializeField] private float averageSystemSpacing = 30f;
+    [Tooltip("Minimum allowed distance between two systems.")]
+    [SerializeField] private float minSystemDistance = 10f;
 
-    [SerializeField] private float minSystemSpacing = 10f;
-    [SerializeField] private float maxSystemSpacing = 60f;
+    [Tooltip("Maximum allowed distance between two systems.")]
+    [SerializeField] private float maxSystemDistance = 60f;
+
+    [Tooltip("How many attempts to make for a valid placement before falling back to edge placement.")]
+    [SerializeField] private int maxPlacementRetries = 8;
 
     [Header("Connections")]
     [Tooltip("Minimum number of wormhole connections each system should have.")]
@@ -30,10 +33,8 @@ public class GalaxyGenerator : MonoBehaviour
     [Tooltip("Maximum number of wormhole connections each system should have.")]
     [SerializeField] private int maxConnectionsPerSystem = 4;
 
-    [Tooltip("Curve controlling how many connections systems tend to get.\n" +
-             "X axis: 0..1 random value, Y axis: 0..1 mapped to [min,max] connections.\n" +
-             "Bias curve towards 0.3–0.6 for 'typical' connectivity, with tails for low/high outliers.")]
-    [SerializeField] private AnimationCurve connectionsPerSystemCurve = AnimationCurve.Linear(0f, 0.5f, 1f, 0.5f);
+    [Tooltip("Earth's Solar System (system ID 0) is forced to have exactly one wormhole connection.")]
+    [SerializeField] private int earthSystemId = 0;
 
     [Header("Debug / Output")]
     [SerializeField] private bool generateOnAwake = true;
@@ -52,6 +53,12 @@ public class GalaxyGenerator : MonoBehaviour
     /// Adjacency list: systemId -> list of neighboring systemIds reachable via wormholes.
     /// </summary>
     public Dictionary<int, List<int>> NeighborsBySystemId { get; private set; } = new Dictionary<int, List<int>>();
+
+    /// <summary>
+    /// Minimum/maximum extents of generated systems, useful for map fitting.
+    /// </summary>
+    public Vector2 MinPosition { get; private set; } = Vector2.zero;
+    public Vector2 MaxPosition { get; private set; } = Vector2.zero;
 
     [Serializable]
     public class SystemNode
@@ -120,6 +127,8 @@ public class GalaxyGenerator : MonoBehaviour
         SystemsById.Clear();
         WormholesById.Clear();
         NeighborsBySystemId.Clear();
+        MinPosition = new Vector2(float.MaxValue, float.MaxValue);
+        MaxPosition = new Vector2(float.MinValue, float.MinValue);
 
         GenerateSystems();
         GenerateConnections();
@@ -127,7 +136,7 @@ public class GalaxyGenerator : MonoBehaviour
     }
 
     /// <summary>
-    /// Generate star systems with approximate average spacing and min/max constraints.
+    /// Generate star systems with randomized spacing between min/max constraints.
     /// </summary>
     private void GenerateSystems()
     {
@@ -142,13 +151,27 @@ public class GalaxyGenerator : MonoBehaviour
         {
             safety++;
 
-            SystemNode anchor = PickAnchorSystem();
-            Vector2 candidatePosition = GetRandomPositionAround(anchor.position);
+            Vector2 candidatePosition = Vector2.zero;
+            bool placed = false;
 
-            if (IsPositionValid(candidatePosition))
+            for (int attempt = 0; attempt < maxPlacementRetries; attempt++)
             {
-                AddSystem(candidatePosition);
+                candidatePosition = SampleRandomPosition();
+                if (IsPositionValid(candidatePosition))
+                {
+                    placed = true;
+                    break;
+                }
             }
+
+            if (!placed)
+            {
+                candidatePosition = SampleEdgePlacement();
+                placed = IsPositionValid(candidatePosition) || systems.Count == 0;
+            }
+
+            if (placed)
+                AddSystem(candidatePosition);
         }
     }
 
@@ -164,52 +187,33 @@ public class GalaxyGenerator : MonoBehaviour
         };
 
         systems.Add(node);
+
+        MinPosition = Vector2.Min(MinPosition, position);
+        MaxPosition = Vector2.Max(MaxPosition, position);
     }
 
-    private SystemNode PickAnchorSystem()
-    {
-        // Mild bias towards "edge" systems by picking one of the furthest few
-        if (systems.Count <= 3)
-            return systems[UnityEngine.Random.Range(0, systems.Count)];
-
-        // Compute approximate center
-        Vector2 sum = Vector2.zero;
-        foreach (var s in systems)
-            sum += s.position;
-
-        Vector2 center = sum / systems.Count;
-
-        // Sort systems by distance from center and pick from outer half
-        systems.Sort((a, b) =>
-        {
-            float da = (a.position - center).sqrMagnitude;
-            float db = (b.position - center).sqrMagnitude;
-            return da.CompareTo(db);
-        });
-
-        int startIndex = systems.Count / 2;
-        int index = UnityEngine.Random.Range(startIndex, systems.Count);
-        return systems[index];
-    }
-
-    private Vector2 GetRandomPositionAround(Vector2 origin)
+    private Vector2 SampleRandomPosition()
     {
         float angle = UnityEngine.Random.Range(0f, Mathf.PI * 2f);
-
-        // Use a non-linear distribution around averageSystemSpacing:
-        // Sample t in [0,1], then bias it towards the center with a curve t^2 mirrored.
-        float t = UnityEngine.Random.value;
-        float centerBias = 1f - Mathf.Pow(1f - t, 2f); // more weight near 1
-        float offset = (centerBias - 0.5f) * 2f;       // [-1,1]
-
-        float distance = Mathf.Clamp(
-            averageSystemSpacing + offset * (maxSystemSpacing - minSystemSpacing) * 0.5f,
-            minSystemSpacing,
-            maxSystemSpacing
-        );
+        float spanMin = Mathf.Max(minSystemDistance, 0.001f);
+        float spanMax = Mathf.Max(maxSystemDistance, spanMin + 0.001f);
+        float distance = UnityEngine.Random.Range(spanMin, spanMax);
 
         Vector2 direction = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
-        return origin + direction * distance;
+        return direction * distance;
+    }
+
+    private Vector2 SampleEdgePlacement()
+    {
+        float currentMaxRadius = 0f;
+        foreach (var system in systems)
+        {
+            currentMaxRadius = Mathf.Max(currentMaxRadius, system.position.magnitude);
+        }
+
+        float fallbackDistance = Mathf.Max(currentMaxRadius + maxSystemDistance * 0.5f, minSystemDistance);
+        float angle = UnityEngine.Random.Range(0f, Mathf.PI * 2f);
+        return new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * fallbackDistance;
     }
 
     private bool IsPositionValid(Vector2 candidate)
@@ -217,20 +221,74 @@ public class GalaxyGenerator : MonoBehaviour
         foreach (var s in systems)
         {
             float d = Vector2.Distance(candidate, s.position);
-            if (d < minSystemSpacing)
+            if (d < minSystemDistance)
                 return false;
         }
 
         return true;
     }
 
+    private void ConnectSpanningTree(ref int wormholeId, int[] currentConnections, int[] desiredConnections)
+    {
+        if (systems.Count <= 1)
+            return;
+
+        HashSet<int> connected = new HashSet<int> { 0 };
+        bool earthIsValid = earthSystemId >= 0 && earthSystemId < systems.Count;
+
+        while (connected.Count < systems.Count)
+        {
+            float bestDistance = float.MaxValue;
+            int bestA = -1;
+            int bestB = -1;
+
+            foreach (int aIndex in connected)
+            {
+                if (earthIsValid && aIndex == earthSystemId && currentConnections[earthSystemId] >= 1)
+                    continue;
+
+                Vector2 aPos = systems[aIndex].position;
+
+                for (int bIndex = 0; bIndex < systems.Count; bIndex++)
+                {
+                    if (connected.Contains(bIndex))
+                        continue;
+
+                    float distance = Vector2.Distance(aPos, systems[bIndex].position);
+                    if (distance < bestDistance)
+                    {
+                        bestDistance = distance;
+                        bestA = aIndex;
+                        bestB = bIndex;
+                    }
+                }
+            }
+
+            if (bestA < 0 || bestB < 0)
+                break;
+
+            desiredConnections[bestA] = Mathf.Max(desiredConnections[bestA], currentConnections[bestA] + 1);
+            desiredConnections[bestB] = Mathf.Max(desiredConnections[bestB], currentConnections[bestB] + 1);
+
+            if (CreateConnectionIfNotExists(ref wormholeId, bestA, bestB))
+            {
+                currentConnections[bestA]++;
+                currentConnections[bestB]++;
+            }
+
+            connected.Add(bestB);
+        }
+    }
+
     /// <summary>
-    /// Generate wormhole connections between systems according to the per-system connection curve.
+    /// Generate wormhole connections between systems using randomized per-system connection counts.
     /// </summary>
     private void GenerateConnections()
     {
         if (systems.Count <= 1)
             return;
+
+        bool earthIsValid = earthSystemId >= 0 && earthSystemId < systems.Count;
 
         // Precompute how many desired connections each system wants
         int[] desiredConnections = new int[systems.Count];
@@ -238,20 +296,31 @@ public class GalaxyGenerator : MonoBehaviour
 
         for (int i = 0; i < systems.Count; i++)
         {
-            float t = Mathf.Clamp01(UnityEngine.Random.value);
-            float curveValue = Mathf.Clamp01(connectionsPerSystemCurve.Evaluate(t));
-            int targetConnections = Mathf.RoundToInt(Mathf.Lerp(minConnectionsPerSystem, maxConnectionsPerSystem, curveValue));
+            if (earthIsValid && i == earthSystemId)
+            {
+                desiredConnections[i] = 1;
+                currentConnections[i] = 0;
+                continue;
+            }
 
-            desiredConnections[i] = Mathf.Max(minConnectionsPerSystem, targetConnections);
+            int targetConnections = UnityEngine.Random.Range(minConnectionsPerSystem, maxConnectionsPerSystem + 1);
+            desiredConnections[i] = Mathf.Clamp(targetConnections, minConnectionsPerSystem, maxConnectionsPerSystem);
             currentConnections[i] = 0;
         }
 
-        // Simple "connect nearest neighbors" approach while enforcing desiredConnections
+        // Ensure the graph is connected by first linking all systems via a spanning tree
         int wormholeId = 0;
+        ConnectSpanningTree(ref wormholeId, currentConnections, desiredConnections);
+
+        // Then add additional connections according to the randomized targets
 
         for (int i = 0; i < systems.Count; i++)
         {
             var a = systems[i];
+
+            if (earthIsValid && i == earthSystemId && currentConnections[i] >= desiredConnections[i])
+                continue;
+
             while (currentConnections[i] < desiredConnections[i])
             {
                 int bIndex = FindBestNeighborIndex(i, currentConnections, desiredConnections);
@@ -270,6 +339,8 @@ public class GalaxyGenerator : MonoBehaviour
                 }
             }
         }
+
+        EnsureEarthHasSingleWormhole(ref wormholeId);
     }
 
     private int FindBestNeighborIndex(int systemIndex, int[] currentConnections, int[] desiredConnections)
@@ -277,11 +348,19 @@ public class GalaxyGenerator : MonoBehaviour
         float bestScore = float.MaxValue;
         int bestIndex = -1;
 
+        bool earthAtLimit = earthSystemId >= 0 && earthSystemId < systems.Count && currentConnections[earthSystemId] >= 1;
+
+        if (systemIndex == earthSystemId && earthAtLimit)
+            return -1;
+
         Vector2 position = systems[systemIndex].position;
 
         for (int i = 0; i < systems.Count; i++)
         {
             if (i == systemIndex)
+                continue;
+
+            if (earthAtLimit && i == earthSystemId)
                 continue;
 
             // Already saturated?
@@ -294,6 +373,63 @@ public class GalaxyGenerator : MonoBehaviour
             if (score < bestScore)
             {
                 bestScore = score;
+                bestIndex = i;
+            }
+        }
+
+        return bestIndex;
+    }
+
+    private void EnsureEarthHasSingleWormhole(ref int wormholeId)
+    {
+        if (earthSystemId < 0 || earthSystemId >= systems.Count)
+            return;
+
+        int connectionsFound = 0;
+
+        for (int i = wormholes.Count - 1; i >= 0; i--)
+        {
+            if (!wormholes[i].IsIncidentTo(earthSystemId))
+                continue;
+
+            connectionsFound++;
+            if (connectionsFound > 1)
+            {
+                wormholes.RemoveAt(i);
+            }
+        }
+
+        if (systems.Count <= 1)
+            return;
+
+        if (connectionsFound == 0)
+        {
+            int targetIndex = FindClosestSystemIndex(earthSystemId);
+            if (targetIndex >= 0)
+            {
+                CreateConnectionIfNotExists(ref wormholeId, earthSystemId, targetIndex);
+            }
+        }
+    }
+
+    private int FindClosestSystemIndex(int sourceIndex)
+    {
+        if (sourceIndex < 0 || sourceIndex >= systems.Count)
+            return -1;
+
+        float bestDistance = float.MaxValue;
+        int bestIndex = -1;
+        Vector2 sourcePos = systems[sourceIndex].position;
+
+        for (int i = 0; i < systems.Count; i++)
+        {
+            if (i == sourceIndex)
+                continue;
+
+            float distance = Vector2.Distance(sourcePos, systems[i].position);
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
                 bestIndex = i;
             }
         }
@@ -343,6 +479,8 @@ public class GalaxyGenerator : MonoBehaviour
         WormholesById.Clear();
         NeighborsBySystemId.Clear();
 
+        RecalculateExtents();
+
         foreach (var system in systems)
         {
             SystemsById[system.id] = system;
@@ -365,6 +503,24 @@ public class GalaxyGenerator : MonoBehaviour
 
             if (!NeighborsBySystemId[wormhole.toSystemId].Contains(wormhole.fromSystemId))
                 NeighborsBySystemId[wormhole.toSystemId].Add(wormhole.fromSystemId);
+        }
+    }
+
+    private void RecalculateExtents()
+    {
+        MinPosition = new Vector2(float.MaxValue, float.MaxValue);
+        MaxPosition = new Vector2(float.MinValue, float.MinValue);
+
+        foreach (var system in systems)
+        {
+            MinPosition = Vector2.Min(MinPosition, system.position);
+            MaxPosition = Vector2.Max(MaxPosition, system.position);
+        }
+
+        if (systems.Count == 0)
+        {
+            MinPosition = Vector2.zero;
+            MaxPosition = Vector2.one;
         }
     }
 

@@ -44,7 +44,7 @@ Each task has an ID (e.g. `M1.1`) so tools and humans can reference them unambig
 
 ### M0 – Map Refresh Issues
 
-- **M0.5 – Event-Based Map Refresh**
+- **M0.5 – Event-Based Map Refresh (implemented)**
   - Create events in `GalaxyState`, e.g.:
     - `OnSystemDiscovered`.
     - `OnCurrentSystemChanged`.
@@ -57,37 +57,35 @@ Each task has an ID (e.g. `M1.1`) so tools and humans can reference them unambig
 
 ## Milestone 1 – Galaxy Generation & Topology
 
-**Goal:** Generate a believable Wormhole Era network according to new rules (average distance, non-linear spread, connection counts).
+**Goal:** Generate a believable Wormhole Era network according to new rules (min/max spacing, randomized spread, connection counts, Solar System constraints).
 
 ### M1 – GalaxyGenerator Overhaul
 
-- **M1.1 – Distance-Based Placement**
+- **M1.1 – Distance-Based Placement (implemented)**
   - Remove `galaxySize` dependency.
   - Add parameters:
-    - `averageSystemDistance`.
     - `minSystemDistance`.
     - `maxSystemDistance`.
-  - Place systems around the origin using `averageSystemDistance ± randomOffset`, with:
-    - More systems near the average distance.
-    - Fewer systems extremely close or extremely far.
-  - Use a non-linear distribution (e.g. via curve-based random) rather than uniform randomness.
+  - Place systems around the origin using random distances between min and max.
 
-- **M1.2 – Connection Distribution**
+- **M1.2 – Connection Distribution (implemented)**
   - Add parameters:
     - `minConnectionsPerSystem`.
     - `maxConnectionsPerSystem`.
-    - `connectionDistributionCurve` (e.g. `AnimationCurve` controlling how many systems become hubs).
   - Use this to create wormhole links:
     - Ensure overall connectivity (ideally a single connected graph, or very few components).
-    - Respect the curve: majority of systems with “typical” degree, a few high-degree hubs, a few sparse systems.
+    - Sample connection counts randomly within the configured min/max instead of using a distribution curve.
 
-- **M1.3 – Edge Placement Fallback**
+- **M1.5 – Solar System Wormhole Cap (implemented)**
+  - Ensure Earth's Solar System (system ID 0) always has exactly one wormhole connection.
+
+- **M1.3 – Edge Placement Fallback (implemented)**
   - When a new star placement is too close to existing stars:
     - Try a limited number of retries with different offsets.
     - If all retries fail, place the star further out toward “edge” regions (e.g. using current max radius).
   - Avoid infinite loops and ensure predictable generation time.
 
-- **M1.4 – Map Extents Output**
+- **M1.4 – Map Extents Output (implemented)**
   - From generated systems, compute spatial extents:
     - `minX`, `maxX`, `minY`, `maxY`.
   - Expose these values to `GalaxyMapUIManager` so it can:
@@ -121,7 +119,7 @@ Each task has an ID (e.g. `M1.1`) so tools and humans can reference them unambig
     - Distinct visuals for:
       - Current system.
       - Discovered systems.
-      - Undiscovered (not shown or shown as unknown).
+      - Undiscovered systems, shown as unknown (only for systems adjacent to discovered systems).
   - Draw lines for wormholes between discovered systems.
   - Ensure this updates when:
     - New systems are discovered.

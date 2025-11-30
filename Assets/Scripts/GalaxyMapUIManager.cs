@@ -30,6 +30,14 @@ public class GalaxyMapUIManager : MonoBehaviour
     [SerializeField] private Color discoveredColor = Color.white;
     [SerializeField] private Color currentSystemColor = Color.cyan;
 
+    [Header("Pan & Zoom")]
+    [SerializeField] private float minZoom = 0.5f;
+    [SerializeField] private float maxZoom = 3f;
+    [SerializeField] private float zoomSpeed = 0.08f;
+    [SerializeField] private float keyboardPanSpeed = 400f;
+    [SerializeField] private float dragPanSpeed = 1f;
+    [SerializeField] private bool clampPanning = true;
+
     [Header("Map Toggle (New Input System)")]
     [Tooltip("Input action used to toggle the map (bind this to the M key in your Input Actions asset).")]
     [SerializeField] private InputActionReference toggleMapAction;
@@ -43,8 +51,13 @@ public class GalaxyMapUIManager : MonoBehaviour
     private readonly List<Image> wormholeLines = new List<Image>();
     private readonly Dictionary<int, Image> wormholeLinesById = new Dictionary<int, Image>();
 
+    private Vector2 galaxyCenter;
+    private float mapFitScale = 1f;
     private Vector2 minPos;
     private Vector2 maxPos;
+    private float currentZoom = 1f;
+    private bool isDragging;
+    private Vector2 lastMousePosition;
 
     private GameDiscoveryState discovery;
 
@@ -171,6 +184,13 @@ public class GalaxyMapUIManager : MonoBehaviour
     {
         ClearMap();
 
+        if (mapContentRect != null)
+        {
+            mapContentRect.anchoredPosition = Vector2.zero;
+            currentZoom = 1f;
+            mapContentRect.localScale = Vector3.one;
+        }
+
         if (galaxy == null || galaxy.Systems == null || galaxy.Systems.Count == 0)
             return;
 
@@ -203,24 +223,24 @@ public class GalaxyMapUIManager : MonoBehaviour
 
     private void ComputeGalaxyBounds()
     {
-        minPos = new Vector2(float.MaxValue, float.MaxValue);
-        maxPos = new Vector2(float.MinValue, float.MinValue);
+        minPos = galaxy.MinPosition;
+        maxPos = galaxy.MaxPosition;
 
-        foreach (var system in galaxy.Systems)
-        {
-            minPos = Vector2.Min(minPos, system.position);
-            maxPos = Vector2.Max(maxPos, system.position);
-        }
+        galaxyCenter = (minPos + maxPos) * 0.5f;
 
-        // Avoid zero-size bounds
-        if (Mathf.Approximately(minPos.x, maxPos.x))
-        {
-            maxPos.x = minPos.x + 1f;
-        }
+        Vector2 size = maxPos - minPos;
+        size.x = Mathf.Max(size.x, 0.01f);
+        size.y = Mathf.Max(size.y, 0.01f);
 
-        if (Mathf.Approximately(minPos.y, maxPos.y))
+        if (mapContentRect != null)
         {
-            maxPos.y = minPos.y + 1f;
+            Vector2 rectSize = mapContentRect.rect.size;
+            rectSize.x = Mathf.Max(rectSize.x, 0.01f);
+            rectSize.y = Mathf.Max(rectSize.y, 0.01f);
+
+            float scaleX = rectSize.x / size.x;
+            float scaleY = rectSize.y / size.y;
+            mapFitScale = Mathf.Min(scaleX, scaleY);
         }
     }
 
@@ -269,20 +289,8 @@ public class GalaxyMapUIManager : MonoBehaviour
 
     private Vector2 GalaxyToMapPosition(Vector2 galaxyPos)
     {
-        Vector2 normalized = new Vector2(
-            Mathf.InverseLerp(minPos.x, maxPos.x, galaxyPos.x),
-            Mathf.InverseLerp(minPos.y, maxPos.y, galaxyPos.y)
-        );
-
-        Vector2 size = mapContentRect.rect.size;
-
-        // Centered in rect
-        Vector2 anchored = new Vector2(
-            (normalized.x - 0.5f) * size.x,
-            (normalized.y - 0.5f) * size.y
-        );
-
-        return anchored;
+        Vector2 centered = galaxyPos - galaxyCenter;
+        return centered * mapFitScale;
     }
 
     /// <summary>
@@ -391,5 +399,103 @@ public class GalaxyMapUIManager : MonoBehaviour
         {
             RefreshVisuals();
         }
+    }
+
+    private void Update()
+    {
+        if (!isOpen || mapContentRect == null)
+            return;
+
+        HandleZoomInput();
+        HandlePanInput();
+    }
+
+    private void HandleZoomInput()
+    {
+        var mouse = Mouse.current;
+        if (mouse == null)
+            return;
+
+        float scroll = mouse.scroll.ReadValue().y;
+        if (Mathf.Approximately(scroll, 0f))
+            return;
+
+        currentZoom = Mathf.Clamp(currentZoom + scroll * zoomSpeed * 0.01f, minZoom, maxZoom);
+        mapContentRect.localScale = Vector3.one * currentZoom;
+
+        if (clampPanning)
+            ClampPanToBounds();
+    }
+
+    private void HandlePanInput()
+    {
+        Vector2 delta = Vector2.zero;
+        var keyboard = Keyboard.current;
+
+        if (keyboard != null)
+        {
+            if (keyboard.wKey.isPressed || keyboard.upArrowKey.isPressed)
+                delta.y += 1f;
+            if (keyboard.sKey.isPressed || keyboard.downArrowKey.isPressed)
+                delta.y -= 1f;
+            if (keyboard.dKey.isPressed || keyboard.rightArrowKey.isPressed)
+                delta.x += 1f;
+            if (keyboard.aKey.isPressed || keyboard.leftArrowKey.isPressed)
+                delta.x -= 1f;
+        }
+
+        if (delta.sqrMagnitude > 0.001f)
+        {
+            delta = delta.normalized * keyboardPanSpeed * Time.deltaTime;
+        }
+
+        var mouse = Mouse.current;
+        if (mouse != null)
+        {
+            if (mouse.rightButton.wasPressedThisFrame || mouse.middleButton.wasPressedThisFrame)
+            {
+                isDragging = true;
+                lastMousePosition = mouse.position.ReadValue();
+            }
+
+            if (isDragging && (mouse.rightButton.isPressed || mouse.middleButton.isPressed))
+            {
+                Vector2 currentPosition = mouse.position.ReadValue();
+                Vector2 dragDelta = currentPosition - lastMousePosition;
+                lastMousePosition = currentPosition;
+                delta += dragDelta * dragPanSpeed;
+            }
+            else if (isDragging)
+            {
+                isDragging = false;
+            }
+        }
+
+        if (delta.sqrMagnitude > 0.0001f)
+        {
+            mapContentRect.anchoredPosition += delta;
+            if (clampPanning)
+                ClampPanToBounds();
+        }
+    }
+
+    private void ClampPanToBounds()
+    {
+        if (mapContentRect == null)
+            return;
+
+        RectTransform parentRect = mapContentRect.parent as RectTransform;
+        if (parentRect == null)
+            return;
+
+        Vector2 scaledSize = Vector2.Scale(mapContentRect.rect.size, mapContentRect.localScale);
+        Vector2 halfContent = scaledSize * 0.5f;
+        Vector2 halfParent = parentRect.rect.size * 0.5f;
+        Vector2 limit = Vector2.Max(halfContent - halfParent, Vector2.zero);
+
+        Vector2 pos = mapContentRect.anchoredPosition;
+        pos.x = Mathf.Clamp(pos.x, -limit.x, limit.x);
+        pos.y = Mathf.Clamp(pos.y, -limit.y, limit.y);
+        mapContentRect.anchoredPosition = pos;
     }
 }

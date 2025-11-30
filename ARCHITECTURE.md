@@ -98,10 +98,9 @@ Assets/
 - Generation:
   - `void GenerateGalaxy(int seed, GalaxyConfig config)`
     - Uses:
-      - Average distance between systems.
-      - Min/max distance constraints.
-      - Non-linear randomness for spacing (clustered typical distances, fewer outliers).
-      - Optional connection distribution curve defining how many wormholes each system tends to have.
+      - Min/max distance constraints with random sampling between them (no distribution curve bias).
+      - Randomized connection counts within min/max instead of a distribution curve.
+      - A Solar System constraint that forces Earth (system ID 0) to expose exactly one wormhole.
 
 ### Dependencies & Usage
 
