@@ -12,12 +12,12 @@ Each task has an ID (e.g. `M1.1`) so tools and humans can reference them unambig
 
 ### M0 – Data & Architecture
 
-- **M0.1 – System & Wormhole IDs**
+- **M0.1 – System & Wormhole IDs (implemented)**
   - Ensure each star system has a unique, persistent ID (e.g. ScriptableObject or data class).
   - Ensure each wormhole/gate pair has unique IDs and references their source/target systems.
   - Centralize this in a `GalaxyState` (or equivalent) manager so UI and gameplay share the same data source.
 
-- **M0.2 – Discovery State**
+- **M0.2 – Discovery State (implemented)**
   - Add data structures to track:
     - Discovered systems.
     - Visited systems (subset of discovered).
@@ -28,17 +28,17 @@ Each task has an ID (e.g. `M1.1`) so tools and humans can reference them unambig
 
 ### M0 – Wormhole Travel & Prompts
 
-- **M0.3 – Refactor Wormhole Jump Flow**
+- **M0.3 – Refactor Wormhole Jump Flow (implemented)**
   - Update `WormholeGate` so it exposes a “can jump / jump target” API.
   - Move the actual jump decision to the ship/controller:
     - Ship requests jump through a gate.
     - Gate validates and triggers scene/system transition.
   - Keep jump logic reusable for player and AI ships.
 
-- **M0.4 – Screen-Space Wormhole Prompt**
+- **M0.4 – Screen-Space Wormhole Prompt (implemented)**
   - Create a `GatePromptLabel` prefab using TextMeshPro (screen-space UI).
   - Hook it into the ship’s targeting/proximity logic so:
-    - When in range of a gate, show “Press [key] to jump to [SystemName]”.
+    - When close to a gate, show "Approaching black hole".
     - When out of range or target changes, hide/refresh the prompt.
   - Ensure this works with the ship as a prefab (no direct scene references; prefer events or a shared manager).
 
