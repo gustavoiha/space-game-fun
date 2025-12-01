@@ -4,6 +4,11 @@ Backlog for the Wormhole Era space exploration and reconstruction game.
 
 Each task has an ID (e.g. `M1.1`) so tools and humans can reference them unambiguously.
 
+The backlog has been updated to reflect a **multi-scene, multi-physics star system architecture**, where:
+- A persistent galaxy root scene holds global data and UI.
+- Each star system has its own additive scene and physics world.
+- A simulation manager advances all active star system scenes in real time.
+
 ---
 
 ## Bugs or gameplay issues
@@ -13,7 +18,7 @@ Each task has an ID (e.g. `M1.1`) so tools and humans can reference them unambig
   -  Fixed: system map now opens centered on the player with a configurable initial system view radius to prevent unintended galaxy view switching when zooming.
 
 ### B2 - Map UI player ship movement
-  - player ship icon in the star system map does not track player ship and looks still.
+  - Player ship icon in the star system map does not track player ship and looks still.
 
 ---
 
@@ -26,7 +31,7 @@ Each task has an ID (e.g. `M1.1`) so tools and humans can reference them unambig
 - **M0.1 – System & Wormhole IDs (IMPLEMENTED)**
   - Ensure each star system has a unique, persistent ID (e.g. ScriptableObject or data class).
   - Ensure each wormhole/gate pair has unique IDs and references their source/target systems.
-  - Centralize this in a `GalaxyState` (or equivalent) manager so UI and gameplay share the same data source.
+  - Centralize this in a `GalaxyState`/`GalaxyGenerator` manager so UI and gameplay share the same data source.
 
 - **M0.2 – Discovery State (IMPLEMENTED)**
   - Add data structures to track:
@@ -64,9 +69,9 @@ Each task has an ID (e.g. `M1.1`) so tools and humans can reference them unambig
     - Add newly discovered systems and wormholes.
   - Fix the issue where the player must close/reopen the map to see changes.
 
-- **M0.6 – In-System Boundary Rework (IMPLEMENTED)**
+- **M0.6 – In-System Boundary Rework [new]**
   - Replace the global cube clamp with a per-system spherical boundary in `PlayerShipController`.
-  - Boundary is centered on `GameManager.CurrentSystemWorldPosition`; falls back to origin if unavailable.
+  - Boundary is centered on the current star system’s anchor (via a local system manager or runtime).
   - Radius is configurable via `systemBoundaryRadius` (default 5000); outward velocity is projected to reduce jitter when clamped.
 
 ---
@@ -102,6 +107,46 @@ Each task has an ID (e.g. `M1.1`) so tools and humans can reference them unambig
 
 ---
 
+## Milestone 0B – Multi-Scene Star System Architecture (NEW)
+
+**Goal:** Move from “all systems share one physical space” to a **multi-scene, multi-physics** setup where each star system has its own scene and physics world, but all are simulated in real time.
+
+- **M0B.1 – Persistent Galaxy Root Scene (TODO)**
+  - Create a dedicated “GalaxyRoot” scene that stays loaded:
+    - Hosts `GalaxyGenerator`, `GameDiscoveryState`, `GalaxySimulationManager`, and global UI (map, HUD, menus).
+  - Ensure this scene can bootstrap the initial star system.
+
+- **M0B.2 – Star System Scene Template (TODO)**
+  - Define a reusable star system scene layout:
+    - Contains a `StarSystemRuntime` root object.
+    - Includes slots for star, background, wormhole gates, and local ships.
+  - Configure one or more example system scenes and link them to system IDs in `GalaxyGenerator`.
+
+- **M0B.3 – Per-System Physics Worlds (TODO)**
+  - Ensure each star system scene has its own physics world (PhysicsScene):
+    - Set up creation using `LocalPhysicsMode.Physics3D` or equivalent.
+  - Confirm that colliders and rigidbodies from different systems never interact.
+
+- **M0B.4 – GalaxySimulationManager Implementation (TODO)**
+  - Implement `GalaxySimulationManager`:
+    - Tracks active `StarSystemRuntime` instances by system ID.
+    - Loads/unloads star system scenes as needed.
+    - Advances each system’s physics and gameplay in `FixedUpdate`.
+  - Provide a simple debug UI to show which systems are currently loaded.
+
+- **M0B.5 – Ship Transfer Between Scenes (TODO)**
+  - Implement the logic to move ships between system scenes on wormhole jumps:
+    - Use `SceneManager.MoveGameObjectToScene` or equivalent.
+    - Position ships at the destination gate’s exit point.
+  - Ensure components such as `PlayerShipController` and `ShipWormholeNavigator` remain functional after scene moves.
+
+- **M0B.6 – AI Ships in Multiple Systems (TODO)**
+  - Define how AI ships are registered with `StarSystemRuntime`.
+  - Keep AI ships simulated in their local star system scenes even when the player is not present.
+  - Provide hooks for later economy/logistics systems to query ships per system.
+
+---
+
 ## Milestone 1 – Galaxy Generation & Topology
 
 **Goal:** Generate a believable Wormhole Era network according to new rules (min/max spacing, randomized spread, connection counts, Solar System constraints).
@@ -113,31 +158,22 @@ Each task has an ID (e.g. `M1.1`) so tools and humans can reference them unambig
   - Add parameters:
     - `minSystemDistance`.
     - `maxSystemDistance`.
-  - Place systems around the origin using Poisson-disk style sampling with jitter to stay uniform while keeping patterns organic.
+  - Place systems around the origin using Poisson-disk style sampling with jitter.
 
 - **M1.2 – Connection Distribution (IMPLEMENTED)**
   - Add parameters:
     - `minConnectionsPerSystem`.
     - `maxConnectionsPerSystem`.
-  - Use this to create wormhole links:
-    - Ensure overall connectivity (ideally a single connected graph, or very few components).
-    - Sample connection counts from configurable weights (1–5) so high-degree hubs (4–5) stay rare.
+  - Use this to create wormhole links with configurable hub distribution.
 
 - **M1.5 – Solar System Wormhole Cap (IMPLEMENTED)**
   - Ensure Earth's Solar System (system ID 0) always has exactly one wormhole connection.
 
 - **M1.3 – Edge Placement Fallback (IMPLEMENTED)**
-  - When a new star placement is too close to existing stars:
-    - Try a limited number of retries with different offsets.
-    - If all retries fail, place the star further out toward “edge” regions (e.g. using current max radius).
-  - Avoid infinite loops and ensure predictable generation time.
+  - Implement a robust fallback for star placement when min-distance constraints fail.
 
 - **M1.4 – Map Extents Output (IMPLEMENTED)**
-  - From generated systems, compute spatial extents:
-    - `minX`, `maxX`, `minY`, `maxY`.
-  - Expose these values to `GalaxyMapUIManager` so it can:
-    - Auto-fit the map camera.
-    - Normalize coordinates into map space.
+  - From generated systems, compute spatial extents for use by `GalaxyMapUIManager`.
 
 ---
 
@@ -148,111 +184,69 @@ Each task has an ID (e.g. `M1.1`) so tools and humans can reference them unambig
 ### M2 – Rendering & Navigation
 
 - **M2.1 – Coordinate Normalization (IMPLEMENTED)**
-  - Decide a mapping from galaxy world coordinates to 2D map space (e.g. 0–1 or UI pixels).
-  - Use the extents from `M1.4` to normalize positions:
-    - Maintain aspect ratio.
-    - Keep systems inside map bounds.
+  - Map galaxy-space coordinates into 2D map space using extents from `M1.4`.
 
 - **M2.2 – Pannable / Zoomable Map (IMPLEMENTED)**
-  - Implement pan and zoom controls:
-    - Pan via mouse drag and/or WASD/arrow keys.
-    - Zoom via mouse scroll.
-  - Implementation options:
-    - Dedicated camera rendering a world-space map.
-    - UI-based map using RectTransforms with scale/position changes (e.g. within a ScrollRect).
+  - Implement pan and zoom controls using a dedicated map camera or UI transforms.
 
 - **M2.3 – Draw Systems & Wormhole Lines (IMPLEMENTED)**
-  - Render system nodes:
-    - Distinct visuals for:
-      - Current system.
-      - Discovered systems.
-      - Undiscovered systems, shown as unknown (only for systems adjacent to discovered systems).
-  - Draw lines for wormholes between discovered systems, and from discovered systems to adjacent frontier systems when the wormhole is known.
-  - Ensure this updates when:
-    - New systems are discovered.
-    - Wormholes become known.
-    - The current system changes.
-  - Drive these updates via `GalaxyState` events from `M0.5`.
+  - Render system nodes and wormhole links.
+  - Visually distinguish current, discovered, and frontier systems.
 
-- **M2.4 - Zooming on map (IMPLEMENTED)**
-  - Pivot center of zooming on the map should be the mouse pointer.
+- **M2.4 – Zoom Pivot on Mouse (IMPLEMENTED)**
+  - Pivot zooming on the mouse pointer.
 
-- **M2.5 - Star system map (IMPLEMENTED)**
-  - Map UI will allow user to see both the galaxy view and a star system view.
-  - By default, the map is opened in the local star system view.
-  - A star system map consists of:
-    - A circle defining the delimited star system area.
-    - A star in the middle.
-    - Icons indicating the position of wormholes.
-    - Icons indicating position of player's ship.
-  - When zooming out to a custommizable threshold:
-    - Map UI will switch from star system map to galaxy map.
-    - Galaxy map should appear centered in star system that was zoomed in.
-  - When zooming in close to a star, in the galaxy mode:
-    - Map UI will switch to star system map.
-    - The system selected for the zoom-in transition is the one closest to the current zoom pivot (mouse pointer), falling back to the view center if needed.
-  - Clicking on a star will also open its star system map.
+- **M2.5 – Star System Map (IMPLEMENTED)**
+  - Map UI allows user to see both galaxy view and star system view.
+  - By default, the map opens in the local star system view.
+  - Handles smooth switching between system view and galaxy view based on zoom.
 
 ### M2 – Interaction
 
 - **M2.6 – System Selection (IMPLEMENTED)**
-  - Enable clicking on a system node to:
-    - Select/highlight it.
-    - Open a small info panel showing:
-      - System name.
-      - Faction.
-      - Basic properties (e.g. hazard level, known stations).
-  - Clearly indicate the current system (e.g. halo, size difference, color).
+  - Enable clicking on a system node to select/highlight it and open an info panel.
 
 - **M2.7 – Wormhole Selection (TODO)**
-  - Enable selecting wormhole edges:
-    - Click on a wormhole icon on the system map.
-    - Show the connected system in the system map.
-    - Show a UI indicator around the wormhole when hovering mouse
-  - Support the UX pattern: “Click wormhole, see the adjacent star system immediately.”
+  - Enable selecting wormhole edges in the map and system view for adjacency preview.
 
 - **M2.8 – Jump / Navigation from Map (TODO)**
-  - From the current system, allow:
-    - Selecting an adjacent system on the map and issuing a “jump” or “set course” command.
-  - Internally:
-    - Map selection to an actual gate or route for the player ship.
-    - Reuse wormhole jump logic from `M0.3`.
+  - From the current system, allow selecting an adjacent system and issuing a “jump” or “set course” command.
+  - Internally, map this to actual gate usage in the relevant system scene via `GalaxySimulationManager`.
 
-- **M2.9 – System mouse hovering [new]**
-  - Enable hovering with the mouse over a system in the map to:
-    - See the information of the system
-    - Use the existing info panel.
+- **M2.9 – System Mouse Hovering (TODO)**
+  - Enable hover tooltips for systems showing their information using the existing info panel.
 
 ---
 
 ## Milestone 3 – System View and In-System Control
 
-**Goal:** From the galaxy map, zoom into a system, see ships, and issue basic orders.
+**Goal:** From the galaxy map, zoom into a system, see ships, and issue basic orders, using the new multi-scene star system architecture.
 
 ### M3 – System View
 
 - **M3.1 – System View Scene/Layout (TODO)**
-  - Implement a 2D or light 3D view for a single star system:
+  - Finalise the layout for a single star system **scene**:
     - Display gates (wormholes).
-    - Display stations/colonies (when IMPLEMENTED).
+    - Display stations/colonies (when implemented).
     - Display ships (player and AI).
-  - Keep the layout readable and consistent with the galaxy map.
+  - Reuse the `StarSystemRuntime` and in-system scene template from `M0B.2`.
 
 - **M3.2 – Transition Map ↔ System View (TODO)**
   - From the galaxy map:
-    - Allow zoom-in or a dedicated button to enter the current system view.
+    - Allow zoom-in or a dedicated button to focus on the current system (camera framing into the active in-system scene).
   - From the system view:
-    - Allow returning to the galaxy map without full scene reload if possible (UI-driven layer).
-  - Ensure current system context is preserved between views.
+    - Allow returning to the galaxy map without full scene reload (UI-driven layer; the in-system scene stays loaded).
+  - Ensure current system context is preserved between views via `GameDiscoveryState`.
 
 - **M3.3 – Ship Selection & Basic Orders (TODO)**
-  - Implement selection mechanics:
+  - Implement selection mechanics in the in-system scene:
     - Click-to-select single ship.
-    - Optional drag-select for multiple ships (later).
+    - Optional drag-select for multiple ships.
   - Provide basic orders for selected ships:
     - Move to point/waypoint.
-    - Dock/undock when stations are present (future integration).
-    - Jump via gate (integrating with `WormholeGate` logic and `M0.3`).
+    - Dock/undock when stations are present.
+    - Jump via gate:
+      - Integrate with `ShipWormholeNavigator` and `GalaxySimulationManager` for cross-scene transfers.
 
 ---
 
@@ -263,47 +257,25 @@ Each task has an ID (e.g. `M1.1`) so tools and humans can reference them unambig
 ### M4 – Economy Foundation
 
 - **M4.1 – Resource Definitions (TODO)**
-  - Define resource types (examples):
-    - Raw ore, refined metals, fuel, food, tech parts, etc.
-  - Define “Population” as a special resource type impacting:
-    - Production capacity.
-    - Growth.
-    - Potentially crew requirements.
+  - Define resource types (ore, metals, fuel, food, tech parts, etc.).
+  - Define “Population” as a special resource type.
 
 - **M4.2 – Colony/Station Model (TODO)**
-  - Create a data model for colonies/stations:
-    - Population count.
-    - Storage capacity per resource type.
-    - Production/consumption rates.
-    - Optional attributes like stability or habitability.
-  - Integrate colony/station data with system view and galaxy state.
+  - Create a data model for colonies/stations linked to star systems.
+  - Integrate with `StarSystemRuntime` so colonies/stations exist in specific system scenes.
 
 - **M4.3 – Fleet Cargo & Capabilities (TODO)**
-  - Extend ship/fleet data:
-    - Cargo capacity (per resource or generic).
-    - Speed and travel time modifiers.
-    - Fuel usage if modeled.
-    - Combat rating (for risk/evaluation).
-  - Ensure fleets can be referenced and manipulated from UI and order systems.
+  - Extend ship/fleet data with cargo, speed, fuel, and combat rating.
+  - Ensure fleets can be referenced from both galaxy-level UI and in-system scenes.
 
 ### M4 – Orders & Evaluation
 
 - **M4.4 – Order Types (TODO)**
-  - Implement basic order types:
-    - Transport cargo (A → B).
-    - Supply or “maintain threshold” orders.
-    - Patrol/escort orders (for later risk modeling).
-  - Define how orders are stored and executed over time.
+  - Implement basic order types like transport, supply, and patrol/escort.
 
 - **M4.5 – “Is This Enough Ships?” Evaluation (TODO)**
-  - For each order, compute:
-    - Required cargo throughput.
-    - Expected travel time.
-    - Optional: required combat rating for safety.
-  - Compare with assigned fleet capabilities to determine:
-    - Sufficient / borderline / insufficient status.
-  - Integrate into order-creation UI:
-    - Show a simple indicator with a short explanation (e.g. “Expected trips per hour: X, required: Y”).
+  - For each order, compute requirements vs assigned fleet capabilities.
+  - Integrate into order-creation UI with simple indicators.
 
 ---
 
@@ -314,45 +286,19 @@ Each task has an ID (e.g. `M1.1`) so tools and humans can reference them unambig
 ### M5 – Faction Data & Ownership
 
 - **M5.1 – Faction ScriptableObjects (TODO)**
-  - Create faction definitions for:
-    - Helios Protectorate.
-    - Horizon Initiative.
-    - Myriad Combine.
-    - Verdure Hegemony.
-    - Aelari Concord.
-    - Karthan Assemblies.
-    - Serathi Enclave.
-  - Include attributes:
-    - Name and display name.
-    - Emblem/icon.
-    - Primary color(s).
-    - Behavioral tags (authoritarian, exploratory, isolationist, etc.).
+  - Create faction definitions (Helios Protectorate, Horizon Initiative, Myriad Combine, etc.).
 
 - **M5.2 – System Ownership & Control (TODO)**
   - Assign each system an owning faction (or “unclaimed”).
-  - Optionally track:
-    - Control level or stability.
-    - Hostility/risk level for travel.
+  - Link ownership to system IDs used by `StarSystemRuntime`.
 
 - **M5.3 – Map Overlays (TODO)**
-  - Add a faction overlay mode to the galaxy map:
-    - Color systems based on owning faction.
-    - Provide a legend for faction colors.
-  - Optionally show contested or neutral zones with distinct styling.
+  - Add a faction overlay mode to the galaxy map.
 
 ### M5 – Reputation & Interaction
 
 - **M5.4 – Reputation System (TODO)**
-  - Track player standing per faction:
-    - Example states: Allied, Friendly, Neutral, Wary, Hostile.
-  - Define simple rules for reputation changes:
-    - Missions completed.
-    - Trade.
-    - Attacking ships or violating territory.
-  - Hook reputation into:
-    - Access to certain systems.
-    - Prices and trade terms.
-    - AI behavior (pirates, patrols, etc.).
+  - Track player standing per faction and hook into trade, access, and AI behaviour.
 
 ---
 
@@ -361,31 +307,11 @@ Each task has an ID (e.g. `M1.1`) so tools and humans can reference them unambig
 **Goal:** Connect systems and mechanics to the lore: Earth as ruined but hopeful project, Helios-controlled Sol, and the long-term reconstruction theme.
 
 - **M6.1 – Special Systems (TODO)**
-  - Define the Sol system as a special case:
-    - Owned by Helios Protectorate.
-    - Heavily fortified, restricted, or high-risk.
-  - Define Earth as a toxic graveyard world:
-    - Special environmental rules (e.g. uninhabitable surface, orbital infrastructure remnants).
-    - Unique visuals or markers in system and map views.
-  - Ensure these systems are non-random and always present.
+  - Define Sol/Earth as special systems with fixed system IDs and dedicated star system scenes.
 
 - **M6.2 – Progression Locks (TODO)**
-  - Gate access to key systems/wormholes via:
-    - Reputation thresholds.
-    - Technology or research.
-    - Story milestones (e.g. specific missions completed).
-  - Implement a simple mechanism for “locked” vs “unlocked” wormholes and systems on the map.
+  - Gate access to key systems/wormholes via reputation, tech, or story milestones.
 
 - **M6.3 – Event System (TODO)**
-  - Implement an event layer capable of:
-    - Triggering story beats (e.g. Helios crackdowns, Horizon discoveries).
-    - Generating unique missions tied to:
-      - Reconstruction.
-      - Exploration of ancient wormhole tech.
-      - Political tensions in the network.
-  - Integrate events with:
-    - Factions.
-    - Systems (local incidents).
-    - Player fleets and colonies.
-
-This document should be updated as tasks are completed, and new mechanics are introduced.
+  - Implement an event system for story beats, missions, and dynamic incidents.
+  - Integrate events with systems, factions, and fleets using the new multi-scene architecture.
