@@ -67,6 +67,37 @@ Each task has an ID (e.g. `M1.1`) so tools and humans can reference them unambig
 
 ---
 
+## Milestone 0A – Basic Playability Visuals (In-System)
+
+**Goal:** Establish minimal in-system visuals so players can orient themselves: readable stars, backgrounds, and major points of interest.
+
+- **M0A.1 – Space Background (skybox/parallax) [new]**
+  - Add a simple starfield skybox or parallax background usable across systems.
+  - Ensure performance-friendly settings and document any required materials/textures.
+
+- **M0A.2 – Primary Star Visual [new]**
+  - Create a basic 3D star using a mesh plus sprite/texture overlay for glow.
+  - Configure lighting/intensity so nearby ships remain visible without overexposure.
+  - Expose color/size parameters so different system stars can be represented.
+
+- **M0A.3 – Black Hole / Gate Anchor Visual [new]**
+  - Add a readable black hole visual for wormhole anchors (e.g., distorted sphere, particle swirl, rim glow).
+  - Keep scale adjustable per gate to match gameplay boundaries and prompts.
+
+- **M0A.4 – Planet/Body Placeholders [new]**
+  - Provide simple planet or moon stand-ins (spheres with basic materials) for system dressing.
+  - Include a lightweight rotation script or animation hook for optional slow spins.
+
+- **M0A.5 – Ambient Lighting & Exposure Baseline [new]**
+  - Set default ambient light and exposure values so ships and UI remain legible in dark space.
+  - Document any post-processing profiles needed for the baseline look.
+
+- **M0A.6 – Navigation Readability Touches [new]**
+  - Add unobtrusive distance/selection markers for key objects (stars, black holes, planets) visible against the background.
+  - Verify markers work with existing targeting/prompt systems without scene-specific references.
+
+---
+
 ## Milestone 1 – Galaxy Generation & Topology
 
 **Goal:** Generate a believable Wormhole Era network according to new rules (min/max spacing, randomized spread, connection counts, Solar System constraints).
