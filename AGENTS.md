@@ -104,7 +104,7 @@ Agents must follow these guidelines for all Unity C# code:
 
 ### 4.4 Project Structure
 
-* Place scripts in sensible folders that match their purpose (e.g., `Scripts/Systems/`, `Scripts/UI/`, `Scripts/Ships/`).
+* Place scripts in sensible folders that match their purpose (e.g., `Assets/Scripts/Systems/`, `Assets/Scripts/UI/`, `Assets/Scripts/Ships/`).
 * Keep namespaces consistent with folder structure when namespaces are used.
 * When adding a new system, ensure it is reflected in `ARCHITECTURE.md` and that folders are logically named.
 
