@@ -6,6 +6,13 @@ Each task has an ID (e.g. `M1.1`) so tools and humans can reference them unambig
 
 ---
 
+## Bugs or gameplay issues
+
+### B1 - Map UI
+  -  When map is opened, first you see the star system map. But as soon as you zoom in or out, the galaxy map appears. When map is opened, it should open in the star system view, with the player's ship in the center, and close to it. There should be a variable similar to SystemMapWorldRadius that defines the size of the initial system area rendered in the map when first opened.
+
+---
+
 ## Milestone 0 – Stabilize Current Prototype (Gates, Discovery, Map)
 
 **Goal:** Reliable travel between systems via wormholes, with correct discovery state and a working map that updates without reopening.
