@@ -158,6 +158,7 @@ public class GameManager : MonoBehaviour
     {
         UpdateCurrentSystemLabel(systemId);
         UpdateCurrentSystemRadius(systemId);
+        EnableActiveSystemStar(systemId);
         BuildWormholeGatesForSystem(systemId);
 
         if (!hasAlignedInitialShipPosition && playerShipInstance != null && systemId >= 0)
@@ -188,6 +189,18 @@ public class GameManager : MonoBehaviour
         {
             currentSystemLabel.text = $"System {systemId}";
         }
+    }
+
+    /// <summary>
+    /// Ensures only the current system's primary star visual is active in the scene.
+    /// </summary>
+    /// <param name="systemId">System identifier that should be visible; negative values hide all.</param>
+    private void EnableActiveSystemStar(int systemId)
+    {
+        if (galaxy == null)
+            return;
+
+        galaxy.SetActiveSystemVisual(systemId);
     }
 
     private void ClearWormholeGates()

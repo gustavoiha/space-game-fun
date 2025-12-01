@@ -412,6 +412,7 @@ public class GalaxyGenerator : MonoBehaviour
 
         Vector3 position = new Vector3(node.position.x, 0f, node.position.y);
         StarSystem instance = Instantiate(starSystemPrefab, position, Quaternion.identity, transform);
+        instance.gameObject.SetActive(false);
         instance.Initialize(node.id, node.displayName, node.systemRadius);
 
         PrimaryStar primaryStar = SpawnPrimaryStar(node, instance);
@@ -788,6 +789,28 @@ public class GalaxyGenerator : MonoBehaviour
 
             if (!NeighborsBySystemId[wormhole.toSystemId].Contains(wormhole.fromSystemId))
                 NeighborsBySystemId[wormhole.toSystemId].Add(wormhole.fromSystemId);
+        }
+    }
+
+    /// <summary>
+    /// Activates only the visual for the requested system, disabling all others to keep
+    /// the in-system view from showing multiple stars at once.
+    /// </summary>
+    /// <param name="activeSystemId">System identifier whose visual should be enabled; pass a negative value to hide all.</param>
+    public void SetActiveSystemVisual(int activeSystemId)
+    {
+        for (int i = 0; i < systems.Count; i++)
+        {
+            var starInstance = systems[i].starSystemInstance;
+
+            if (starInstance == null)
+                continue;
+
+            bool shouldBeActive = systems[i].id == activeSystemId && activeSystemId >= 0;
+            if (starInstance.gameObject.activeSelf != shouldBeActive)
+            {
+                starInstance.gameObject.SetActive(shouldBeActive);
+            }
         }
     }
 
