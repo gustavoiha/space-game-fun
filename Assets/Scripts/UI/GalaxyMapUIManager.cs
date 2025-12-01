@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.InputSystem;   // New Input System
+using TMPro;
 
 /// <summary>
 /// Draws the 2D galaxy map and colors systems/wormholes based on GameDiscoveryState.
@@ -104,16 +105,16 @@ public class GalaxyMapUIManager : MonoBehaviour
     [SerializeField] private GameObject systemInfoPanel;
 
     [Tooltip("Text element used to show the name of the selected system.")]
-    [SerializeField] private Text systemNameText;
+    [SerializeField] private TMP_Text systemNameText;
 
     [Tooltip("Text element used to show the faction present in the selected system.")]
-    [SerializeField] private Text systemFactionText;
+    [SerializeField] private TMP_Text systemFactionText;
 
     [Tooltip("Text element used to show the hazard level for the selected system.")]
-    [SerializeField] private Text systemHazardText;
+    [SerializeField] private TMP_Text systemHazardText;
 
     [Tooltip("Text element used to show notable stations within the selected system.")]
-    [SerializeField] private Text systemStationsText;
+    [SerializeField] private TMP_Text systemStationsText;
 
     private bool isOpen;
 
