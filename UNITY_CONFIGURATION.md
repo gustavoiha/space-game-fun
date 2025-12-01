@@ -50,3 +50,21 @@ Follow these steps to wire the new dual-mode map UI (system + galaxy) into your 
 - Create a star prefab with the `PrimaryStar` component and assign its visual/light references as needed (visual root, optional renderer, optional light).
 - In `GalaxyGenerator`, set **Primary Star Prefab** to this prefab so each generated system spawns it at its origin.
 - Configure **Star Color Gradient** (or leave blank to use the default color) and adjust **Min/Max Star Radius** to fit your desired star sizes.
+
+## Galaxy root and simulation managers
+
+- In the persistent `GalaxyRoot` scene, place the following singletons on always-loaded GameObjects:
+  - `GalaxyGenerator` (with the same generation settings already documented and a reference to `Primary Star Prefab`).
+  - `GameDiscoveryState` (set **Starting System Id** as needed for your prototype).
+  - `GalaxySimulationManager`:
+    - Assign `Galaxy` to the `GalaxyGenerator` instance and `Discovery State` to the `GameDiscoveryState` instance.
+    - Set `Wormhole Gate Prefab` to the same gate prefab used previously for in-system placement.
+    - Keep `System Position Scale` at `1` unless you rescale `GalaxyGenerator` output; this value is used to position gates around
+      each generated system when scenes are created.
+    - Set `Gate Ring Radius` to the desired distance from the system center (match the map scale used in `GalaxyMapUIManager`).
+    - Optionally assign `Loaded Systems Label` (TMP_Text) to surface a debug list of loaded system IDs at runtime.
+    - Leave `Auto Load Current System` enabled so the manager loads the starting system scene as soon as discovery is initialised
+      (it also simulates all loaded systems in `FixedUpdate`).
+- The manager will automatically create additive star system scenes using `LocalPhysicsMode.Physics3D`, move the generated star
+  visuals into their scenes, and spawn per-system wormhole gates. Ships are moved between these scenes via `ShipWormholeNavigator`
+  and `GalaxySimulationManager.MoveShipToSystem`.

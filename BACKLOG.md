@@ -112,28 +112,35 @@ The backlog has been updated to reflect a **multi-scene, multi-physics star syst
 
 **Goal:** Move from “all systems share one physical space” to a **multi-scene, multi-physics** setup where each star system has its own scene and physics world, but all are simulated in real time.
 
-- **M0B.1 – Persistent Galaxy Root Scene (TODO)**
+- **M0B.1 – Persistent Galaxy Root Scene (IN PROGRESS)**
   - Create a dedicated “GalaxyRoot” scene that stays loaded:
     - Hosts `GalaxyGenerator`, `GameDiscoveryState`, `GalaxySimulationManager`, and global UI (map, HUD, menus).
   - Ensure this scene can bootstrap the initial star system.
+  - **Notes:** `GalaxySimulationManager` now assumes the persistent scene owns the global managers and will auto-load the current
+    system when discovery state is initialised. Scene authoring steps added to `UNITY_CONFIGURATION.md`.
 
-- **M0B.2 – Star System Scene Template (TODO)**
+- **M0B.2 – Star System Scene Template (IN PROGRESS)**
   - Define a reusable star system scene layout:
     - Contains a `StarSystemRuntime` root object.
     - Includes slots for star, background, wormhole gates, and local ships.
   - Configure one or more example system scenes and link them to system IDs in `GalaxyGenerator`.
+  - **Notes:** Star system runtimes are now created procedurally per system using `LocalPhysicsMode.Physics3D` and the generated
+    star visuals. Authored template scenes can still be added later for richer dressing.
 
-- **M0B.3 – Per-System Physics Worlds (TODO)**
+- **M0B.3 – Per-System Physics Worlds (IMPLEMENTED)**
   - Ensure each star system scene has its own physics world (PhysicsScene):
     - Set up creation using `LocalPhysicsMode.Physics3D` or equivalent.
   - Confirm that colliders and rigidbodies from different systems never interact.
+  - **Notes:** `GalaxySimulationManager` creates per-system scenes with isolated physics and drives them in `FixedUpdate`.
 
-- **M0B.4 – GalaxySimulationManager Implementation (TODO)**
+- **M0B.4 – GalaxySimulationManager Implementation (IN PROGRESS)**
   - Implement `GalaxySimulationManager`:
     - Tracks active `StarSystemRuntime` instances by system ID.
     - Loads/unloads star system scenes as needed.
     - Advances each system’s physics and gameplay in `FixedUpdate`.
   - Provide a simple debug UI to show which systems are currently loaded.
+  - **Notes:** Manager now creates runtime scenes, spawns gates, moves ships across scenes, and updates a debug label. Unloading
+    and persistent AI hooks remain to be fleshed out.
 
 - **M0B.5 – Ship Transfer Between Scenes (TODO)**
   - Implement the logic to move ships between system scenes on wormhole jumps:

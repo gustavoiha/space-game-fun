@@ -287,6 +287,7 @@ public class ShipWormholeNavigator : MonoBehaviour
 
         var gm = GameManager.Instance;
         var discovery = GameDiscoveryState.Instance;
+        var simulationManager = GalaxySimulationManager.Instance;
 
         if (gm != null)
         {
@@ -307,13 +308,25 @@ public class ShipWormholeNavigator : MonoBehaviour
             {
                 gm.DiscoverSystem(targetSystemId);
             }
-
-            gm.SetCurrentSystem(targetSystemId);
         }
 
         WormholeGate destinationGate = null;
 
-        if (gm != null)
+        if (simulationManager != null)
+        {
+            simulationManager.EnsureSystemLoaded(targetSystemId);
+
+            if (wormholeId >= 0)
+            {
+                simulationManager.TryGetGateForWormhole(targetSystemId, wormholeId, out destinationGate);
+            }
+
+            if (destinationGate == null && originSystemId >= 0)
+            {
+                simulationManager.TryGetGateForTargetSystem(targetSystemId, originSystemId, out destinationGate);
+            }
+        }
+        else if (gm != null)
         {
             if (wormholeId >= 0)
             {
@@ -326,40 +339,52 @@ public class ShipWormholeNavigator : MonoBehaviour
             }
         }
 
-        Vector3 targetPosition = transform.position;
-        Quaternion targetRotation = transform.rotation;
-
         Transform exit = destinationGate != null ? destinationGate.ExitPoint : null;
 
-        if (exit != null)
+        if (simulationManager != null)
         {
-            targetPosition = exit.position;
-            targetRotation = exit.rotation;
-        }
-        else if (destinationGate != null)
-        {
-            targetPosition = destinationGate.transform.position + destinationGate.transform.forward * 5f;
-            targetRotation = destinationGate.transform.rotation;
-        }
-        else if (activeGateForJump.ExitPoint != null)
-        {
-            targetPosition = activeGateForJump.ExitPoint.position;
-            targetRotation = activeGateForJump.ExitPoint.rotation;
+            simulationManager.MoveShipToSystem(gameObject, targetSystemId, exit, destinationGate ?? activeGateForJump);
         }
         else
         {
-            targetPosition = activeGateForJump.transform.position;
-            targetRotation = activeGateForJump.transform.rotation;
+            Vector3 targetPosition = transform.position;
+            Quaternion targetRotation = transform.rotation;
+
+            if (exit != null)
+            {
+                targetPosition = exit.position;
+                targetRotation = exit.rotation;
+            }
+            else if (destinationGate != null)
+            {
+                targetPosition = destinationGate.transform.position + destinationGate.transform.forward * 5f;
+                targetRotation = destinationGate.transform.rotation;
+            }
+            else if (activeGateForJump.ExitPoint != null)
+            {
+                targetPosition = activeGateForJump.ExitPoint.position;
+                targetRotation = activeGateForJump.ExitPoint.rotation;
+            }
+            else
+            {
+                targetPosition = activeGateForJump.transform.position;
+                targetRotation = activeGateForJump.transform.rotation;
+            }
+
+            transform.position = targetPosition;
+            transform.rotation = targetRotation;
+
+            var rb = GetComponent<Rigidbody>();
+            if (rb != null)
+            {
+                rb.linearVelocity = Vector3.zero;
+                rb.angularVelocity = Vector3.zero;
+            }
         }
 
-        transform.position = targetPosition;
-        transform.rotation = targetRotation;
-
-        var rb = GetComponent<Rigidbody>();
-        if (rb != null)
+        if (gm != null)
         {
-            rb.linearVelocity = Vector3.zero;
-            rb.angularVelocity = Vector3.zero;
+            gm.SetCurrentSystem(targetSystemId);
         }
 
         HidePrompt();

@@ -32,8 +32,8 @@ Core ideas:
 - **Game State**
   - `GameDiscoveryState.cs`
 - **Simulation / Scenes**
-  - `GalaxySimulationManager.cs` *(NEW)*
-  - `StarSystemRuntime.cs` *(NEW)*
+  - `GalaxySimulationManager.cs` *(NEW, implemented)*
+  - `StarSystemRuntime.cs` *(NEW, implemented)*
 - **World / Gameplay**
   - `PlayerShipController.cs`
   - `WormholeGate.cs`
@@ -102,6 +102,11 @@ The game now uses a multi-scene setup:
 
   A star system scene is loaded when it becomes relevant (e.g. the player jumps in or a simulation rule requires it) and can be
   kept loaded for continuous simulation or unloaded to save performance.
+
+`GalaxySimulationManager` now instantiates these additive scenes on demand using `LocalPhysicsMode.Physics3D` to enforce physics
+isolation. It moves generated star visuals from `GalaxyGenerator` into the proper scene, builds gate prefabs for every neighbor
+system, and registers ships as they enter. A lightweight debug label enumerates loaded system IDs and marks the one containing
+the player.
 
 ### Physics separation
 
