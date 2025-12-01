@@ -206,9 +206,9 @@ Each task has an ID (e.g. `M1.1`) so tools and humans can reference them unambig
 
 - **M2.7 – Wormhole Selection (TODO)**
   - Enable selecting wormhole edges:
-    - Click on line or a gate icon on the map.
-    - Show the two connected systems.
-    - Provide a quick button to focus the map camera on the adjacent system.
+    - Click on a wormhole icon on the system map.
+    - Show the connected system in the system map.
+    - Show a UI indicator around the wormhole when hovering mouse
   - Support the UX pattern: “Click wormhole, see the adjacent star system immediately.”
 
 - **M2.8 – Jump / Navigation from Map (TODO)**
@@ -217,6 +217,11 @@ Each task has an ID (e.g. `M1.1`) so tools and humans can reference them unambig
   - Internally:
     - Map selection to an actual gate or route for the player ship.
     - Reuse wormhole jump logic from `M0.3`.
+
+- **M2.9 – System mouse hovering [new]**
+  - Enable hovering with the mouse over a system in the map to:
+    - See the information of the system
+    - Use the existing info panel.
 
 ---
 
