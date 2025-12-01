@@ -60,6 +60,39 @@ public class GalaxyGenerator : MonoBehaviour
     [SerializeField] private List<SystemNode> systems = new List<SystemNode>();
     [SerializeField] private List<WormholeLink> wormholes = new List<WormholeLink>();
 
+    /// <summary>
+    /// Faction names sampled for generated systems.
+    /// </summary>
+    private static readonly string[] FactionNames =
+    {
+        "Horizon Initiative",
+        "Helios Protectorate",
+        "Independent Freehold",
+        "Uncharted Space"
+    };
+
+    /// <summary>
+    /// Hazard descriptors available to generated systems.
+    /// </summary>
+    private static readonly string[] HazardLevels =
+    {
+        "Low",
+        "Moderate",
+        "High"
+    };
+
+    /// <summary>
+    /// Station name options assigned to systems for display purposes.
+    /// </summary>
+    private static readonly string[] StationNames =
+    {
+        "Listening Post",
+        "Relay Hub",
+        "Research Outpost",
+        "Refuelling Depot",
+        "Salvage Yard"
+    };
+
     // ID lookups (built after generation)
     public IReadOnlyList<SystemNode> Systems => systems;
     public IReadOnlyList<WormholeLink> Wormholes => wormholes;
@@ -88,6 +121,15 @@ public class GalaxyGenerator : MonoBehaviour
 
         [Tooltip("Optional display name; can be generated or assigned later.")]
         public string displayName;
+
+        [Tooltip("Faction primarily associated with this system.")]
+        public string faction;
+
+        [Tooltip("High-level hazard rating used for navigation guidance.")]
+        public string hazardLevel;
+
+        [Tooltip("List of notable or known stations present in the system.")]
+        public List<string> knownStations = new List<string>();
 
         [Tooltip("World-space radius that bounds gameplay within this system.")]
         public float systemRadius = 4000f;
@@ -227,6 +269,9 @@ public class GalaxyGenerator : MonoBehaviour
             id = id,
             position = position,
             displayName = $"SYS-{id:D3}",
+            faction = SampleFaction(id),
+            hazardLevel = SampleHazardLevel(id),
+            knownStations = SampleStations(id),
             systemRadius = radius
         };
 
@@ -236,6 +281,62 @@ public class GalaxyGenerator : MonoBehaviour
 
         MinPosition = Vector2.Min(MinPosition, position);
         MaxPosition = Vector2.Max(MaxPosition, position);
+    }
+
+    /// <summary>
+    /// Selects a faction name for a system using its identifier for deterministic variety.
+    /// </summary>
+    /// <param name="systemId">Identifier of the system being generated.</param>
+    /// <returns>Faction name assigned to the system.</returns>
+    private string SampleFaction(int systemId)
+    {
+        if (FactionNames == null || FactionNames.Length == 0)
+            return string.Empty;
+
+        int index = Mathf.Abs(systemId) % FactionNames.Length;
+        return FactionNames[index];
+    }
+
+    /// <summary>
+    /// Chooses a hazard level for a system using its identifier for consistent sampling.
+    /// </summary>
+    /// <param name="systemId">Identifier of the system being generated.</param>
+    /// <returns>Hazard level descriptor.</returns>
+    private string SampleHazardLevel(int systemId)
+    {
+        if (HazardLevels == null || HazardLevels.Length == 0)
+            return string.Empty;
+
+        int index = Mathf.Abs(systemId * 3 + 1) % HazardLevels.Length;
+        return HazardLevels[index];
+    }
+
+    /// <summary>
+    /// Builds a list of known stations in a system based on deterministic sampling.
+    /// </summary>
+    /// <param name="systemId">Identifier of the system being generated.</param>
+    /// <returns>List of station names assigned to the system.</returns>
+    private List<string> SampleStations(int systemId)
+    {
+        List<string> stations = new List<string>();
+
+        if (StationNames == null || StationNames.Length == 0)
+            return stations;
+
+        int seed = Mathf.Abs(systemId * 11 + 5);
+        int stationCount = Mathf.Clamp(seed % 3, 0, 2);
+
+        for (int i = 0; i < stationCount; i++)
+        {
+            int index = (seed + i * 7) % StationNames.Length;
+            string station = StationNames[index];
+            if (!stations.Contains(station))
+            {
+                stations.Add(station);
+            }
+        }
+
+        return stations;
     }
 
     /// <summary>

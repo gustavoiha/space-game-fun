@@ -56,6 +56,9 @@ public class GalaxyMapUIManager : MonoBehaviour
     [SerializeField] private Color discoveredColor = Color.white;
     [SerializeField] private Color currentSystemColor = Color.cyan;
 
+    [Tooltip("Color applied to the icon of the currently selected system.")]
+    [SerializeField] private Color selectedSystemColor = Color.yellow;
+
     [Header("Initial View")]
     [Tooltip("Zoom applied when the map opens or is rebuilt.")]
     [SerializeField] private float initialZoom = 1.25f;
@@ -96,6 +99,22 @@ public class GalaxyMapUIManager : MonoBehaviour
     [Tooltip("Whether the map should start open when the scene loads.")]
     [SerializeField] private bool openOnStart = false;
 
+    [Header("System Info Panel")]
+    [Tooltip("Panel used to display information about the selected system.")]
+    [SerializeField] private GameObject systemInfoPanel;
+
+    [Tooltip("Text element used to show the name of the selected system.")]
+    [SerializeField] private Text systemNameText;
+
+    [Tooltip("Text element used to show the faction present in the selected system.")]
+    [SerializeField] private Text systemFactionText;
+
+    [Tooltip("Text element used to show the hazard level for the selected system.")]
+    [SerializeField] private Text systemHazardText;
+
+    [Tooltip("Text element used to show notable stations within the selected system.")]
+    [SerializeField] private Text systemStationsText;
+
     private bool isOpen;
 
     private readonly Dictionary<int, RectTransform> systemIconsById = new Dictionary<int, RectTransform>();
@@ -117,6 +136,11 @@ public class GalaxyMapUIManager : MonoBehaviour
     private RectTransform systemStarIconInstance;
     private RectTransform playerShipIconInstance;
     private readonly Dictionary<int, RectTransform> systemWormholeIconsById = new Dictionary<int, RectTransform>();
+
+    /// <summary>
+    /// Currently selected system identifier used to drive highlight and info panel content.
+    /// </summary>
+    private int selectedSystemId = -1;
 
     private GameDiscoveryState discovery;
 
@@ -292,10 +316,12 @@ public class GalaxyMapUIManager : MonoBehaviour
         CreateWormholeLines();
 
         activeSystemMapSystemId = discovery != null ? discovery.CurrentSystemId : 0;
+        selectedSystemId = activeSystemMapSystemId;
         BuildSystemMap(activeSystemMapSystemId);
 
         ResetViewToCurrentSystem();
         RefreshVisuals();
+        UpdateSystemInfoPanel();
         SetMode(MapMode.System, true);
     }
 
@@ -388,12 +414,24 @@ public class GalaxyMapUIManager : MonoBehaviour
 
     private void OnSystemIconClicked(int systemId)
     {
+        SetSelectedSystem(systemId);
         ShowSystemMapForSystem(systemId);
         FocusOnSystem(systemId);
         ApplyZoom(systemMapZoomThreshold);
 
         if (clampPanning)
             ClampPanToBounds();
+    }
+
+    /// <summary>
+    /// Updates the current system selection and refreshes dependent UI.
+    /// </summary>
+    /// <param name="systemId">Identifier of the system being selected.</param>
+    private void SetSelectedSystem(int systemId)
+    {
+        selectedSystemId = systemId;
+        UpdateSystemInfoPanel();
+        RefreshSystemVisuals();
     }
 
     private void CreateWormholeLines()
@@ -474,8 +512,10 @@ public class GalaxyMapUIManager : MonoBehaviour
     /// </summary>
     public void ShowSystemMapForSystem(int systemId)
     {
+        selectedSystemId = systemId;
         BuildSystemMap(systemId);
         SetMode(MapMode.System, true);
+        UpdateSystemInfoPanel();
     }
 
     private void RefreshVisuals()
@@ -491,6 +531,7 @@ public class GalaxyMapUIManager : MonoBehaviour
         {
             BuildSystemMap(activeSystemMapSystemId);
             RefreshVisuals();
+            UpdateSystemInfoPanel();
         }
     }
 
@@ -500,6 +541,7 @@ public class GalaxyMapUIManager : MonoBehaviour
         {
             BuildSystemMap(systemId);
             RefreshVisuals();
+            UpdateSystemInfoPanel();
         }
     }
 
@@ -705,6 +747,7 @@ public class GalaxyMapUIManager : MonoBehaviour
         else if (currentMode == MapMode.Galaxy && currentZoom >= galaxyToSystemZoomThreshold)
         {
             UpdateActiveSystemFromPointer();
+            SetSelectedSystem(activeSystemMapSystemId);
             BuildSystemMap(activeSystemMapSystemId);
             SetMode(MapMode.System, true);
             ApplyZoom(currentZoom);
@@ -783,13 +826,18 @@ public class GalaxyMapUIManager : MonoBehaviour
             bool isDiscovered = discovery.IsSystemDiscovered(systemId);
             bool shouldShow = ShouldShowSystemOnMap(systemId);
             bool isFrontier = shouldShow && !isDiscovered;
+            bool isSelected = selectedSystemId == systemId;
 
             icon.gameObject.SetActive(shouldShow);
 
             if (!shouldShow)
                 continue;
 
-            if (isCurrent)
+            if (isSelected)
+            {
+                image.color = selectedSystemColor;
+            }
+            else if (isCurrent)
             {
                 image.color = currentSystemColor;
             }
@@ -802,6 +850,49 @@ public class GalaxyMapUIManager : MonoBehaviour
                 image.color = undiscoveredColor;
             }
         }
+    }
+
+    /// <summary>
+    /// Updates the system info panel with details for the currently selected system.
+    /// </summary>
+    private void UpdateSystemInfoPanel()
+    {
+        if (systemInfoPanel == null)
+            return;
+
+        GalaxyGenerator.SystemNode system = null;
+        bool hasSystem = galaxy != null && galaxy.SystemsById.TryGetValue(selectedSystemId, out system);
+        systemInfoPanel.SetActive(hasSystem);
+
+        if (!hasSystem)
+            return;
+
+        if (systemNameText != null)
+            systemNameText.text = string.IsNullOrEmpty(system.displayName) ? $"System {system.id}" : system.displayName;
+
+        if (systemFactionText != null)
+            systemFactionText.text = $"Faction: {(!string.IsNullOrEmpty(system.faction) ? system.faction : "Unknown")}";
+
+        if (systemHazardText != null)
+            systemHazardText.text = $"Hazard: {(!string.IsNullOrEmpty(system.hazardLevel) ? system.hazardLevel : "Uncharted")}";
+
+        if (systemStationsText != null)
+            systemStationsText.text = FormatStations(system.knownStations);
+    }
+
+    /// <summary>
+    /// Formats the station list for display in the info panel.
+    /// </summary>
+    /// <param name="stations">Collection of station names recorded for the system.</param>
+    /// <returns>Text describing station presence.</returns>
+    private string FormatStations(IReadOnlyCollection<string> stations)
+    {
+        if (stations != null && stations.Count > 0)
+        {
+            return $"Stations: {string.Join(", ", stations)}";
+        }
+
+        return "Stations: None documented";
     }
 
     private void RefreshSystemMapVisuals()
@@ -862,6 +953,7 @@ public class GalaxyMapUIManager : MonoBehaviour
         else if (forceRebuild)
         {
             BuildSystemMap(activeSystemMapSystemId);
+            UpdateSystemInfoPanel();
         }
     }
 

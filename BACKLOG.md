@@ -195,7 +195,7 @@ Each task has an ID (e.g. `M1.1`) so tools and humans can reference them unambig
 
 ### M2 – Interaction
 
-- **M2.6 – System Selection (TODO)**
+- **M2.6 – System Selection (IMPLEMENTED)**
   - Enable clicking on a system node to:
     - Select/highlight it.
     - Open a small info panel showing:

@@ -29,3 +29,12 @@ Follow these steps to wire the new dual-mode map UI (system + galaxy) into your 
 
 7. **References**
    - Ensure `GalaxyGenerator`, `GameDiscoveryState`, and `GameManager` singletons exist in the scene so the map can resolve positions and discovery state.
+
+8. **System info panel wiring**
+   - Create or identify an info panel under the map canvas and assign it to `System Info Panel`; the panel stays hidden until a system is selected.
+   - Assign the child `Text` components that should display metadata to:
+     - `System Name Text` – shows the selected system’s display name.
+     - `System Faction Text` – shows the faction recorded for the system.
+     - `System Hazard Text` – shows the hazard level string.
+     - `System Stations Text` – lists known stations or indicates when none are documented.
+   - Ensure each system icon prefab retains its `Button` component so clicks drive selection and panel updates.
