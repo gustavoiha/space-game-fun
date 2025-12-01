@@ -10,6 +10,7 @@ Each task has an ID (e.g. `M1.1`) so tools and humans can reference them unambig
 
 ### B1 - Map UI (TODO)
   -  When map is opened, first you see the star system map. But as soon as you zoom in or out, the galaxy map appears. When map is opened, it should open in the star system view, with the player's ship in the center, and close to it. There should be a variable similar to SystemMapWorldRadius that defines the size of the initial system area rendered in the map when first opened.
+  -  Fixed: system map now opens centered on the player with a configurable initial system view radius to prevent unintended galaxy view switching when zooming.
 
 ---
 

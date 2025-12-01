@@ -59,6 +59,8 @@ public class GalaxyMapUIManager : MonoBehaviour
     [Header("Initial View")]
     [Tooltip("Zoom applied when the map opens or is rebuilt.")]
     [SerializeField] private float initialZoom = 1.25f;
+    [Tooltip("Approximate world-space radius around the player to show when the map first opens.")]
+    [SerializeField] private float initialSystemViewWorldRadius = 1500f;
     [Tooltip("If true, the map recenters on the current system when opened.")]
     [SerializeField] private bool focusOnCurrentSystemOnOpen = true;
 
@@ -517,7 +519,11 @@ public class GalaxyMapUIManager : MonoBehaviour
 
     private void ResetViewToCurrentSystem()
     {
-        ApplyZoom(initialZoom);
+        float targetZoom = focusOnCurrentSystemOnOpen
+            ? CalculateInitialSystemZoom()
+            : initialZoom;
+
+        ApplyZoom(targetZoom);
 
         if (currentMode == MapMode.Galaxy)
         {
@@ -537,8 +543,33 @@ public class GalaxyMapUIManager : MonoBehaviour
             }
 
             if (systemMapContentRect != null)
-                systemMapContentRect.anchoredPosition = Vector2.zero;
+            {
+                if (!TryGetPlayerShipAnchoredPosition(out Vector2 playerAnchoredPosition))
+                {
+                    playerAnchoredPosition = Vector2.zero;
+                }
+
+                systemMapContentRect.anchoredPosition = -playerAnchoredPosition;
+            }
         }
+    }
+
+    private float CalculateInitialSystemZoom()
+    {
+        float worldRadius = GetSystemMapWorldRadius();
+        if (worldRadius <= 0.001f)
+            return initialZoom;
+
+        float referenceScale = GetSystemMapScale();
+        if (referenceScale <= 0.0001f)
+            return initialZoom;
+
+        float desiredRadius = initialSystemViewWorldRadius > 0f
+            ? initialSystemViewWorldRadius
+            : worldRadius;
+
+        float computedZoom = worldRadius / (desiredRadius * referenceScale);
+        return Mathf.Clamp(computedZoom, minZoom, maxZoom);
     }
 
     private void ApplyZoom(float targetZoom)
@@ -970,24 +1001,34 @@ public class GalaxyMapUIManager : MonoBehaviour
         if (playerShipIconInstance == null)
             return;
 
-        var gm = GameManager.Instance;
-        bool shouldShow = gm != null && discovery != null && discovery.CurrentSystemId == activeSystemMapSystemId && gm.PlayerShip != null;
-        playerShipIconInstance.gameObject.SetActive(shouldShow);
+        bool hasPosition = TryGetPlayerShipAnchoredPosition(out Vector2 anchoredPosition);
+        playerShipIconInstance.gameObject.SetActive(hasPosition);
 
-        if (!shouldShow)
+        if (!hasPosition)
             return;
 
+        playerShipIconInstance.anchoredPosition = anchoredPosition;
+    }
+
+    private bool TryGetPlayerShipAnchoredPosition(out Vector2 anchoredPosition)
+    {
+        anchoredPosition = Vector2.zero;
+
+        var gm = GameManager.Instance;
+        if (gm == null || discovery == null || discovery.CurrentSystemId != activeSystemMapSystemId || gm.PlayerShip == null)
+            return false;
+
+        float worldRadius = GetSystemMapWorldRadius();
+        if (worldRadius < 0.001f)
+            return false;
+
+        float uiRadius = GetSystemMapUiRadius();
         Vector3 center = gm.CurrentSystemWorldPosition;
         Vector3 shipPos = gm.PlayerShip.transform.position;
         Vector3 offset = shipPos - center;
 
-        float uiRadius = GetSystemMapUiRadius();
-        float worldRadius = GetSystemMapWorldRadius();
-        if (worldRadius < 0.001f)
-            worldRadius = 1f;
-
-        Vector2 mapped = new Vector2(offset.x, offset.z) * (uiRadius / worldRadius);
-        playerShipIconInstance.anchoredPosition = mapped;
+        anchoredPosition = new Vector2(offset.x, offset.z) * (uiRadius / worldRadius);
+        return true;
     }
 
     private float GetSystemMapUiRadius()
