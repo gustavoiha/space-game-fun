@@ -79,7 +79,7 @@ Each task has an ID (e.g. `M1.1`) so tools and humans can reference them unambig
   - Add a single static starfield background usable across systems.
   - Ensure performance-friendly settings and document any required materials/textures.
 
-- **M0A.2 – Primary Star Visual [new]**
+- **M0A.2 – Primary Star Visual (IMPLEMENTED)**
   - Create a basic 3D star using a mesh plus sprite/texture overlay for glow.
   - Configure lighting/intensity so nearby ships remain visible without overexposure.
   - Expose color/size parameters so different system stars can be represented.

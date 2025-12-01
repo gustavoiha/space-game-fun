@@ -20,6 +20,22 @@ public class GalaxyGenerator : MonoBehaviour
     [Tooltip("Prefab used to represent an individual generated star system.")]
     [SerializeField] private StarSystem starSystemPrefab;
 
+    [Header("Star Visuals")]
+    [Tooltip("Prefab placed at the center of each generated system to represent its primary star.")]
+    [SerializeField] private PrimaryStar primaryStarPrefab;
+
+    [Tooltip("Gradient sampled to tint generated stars. If empty, white is used.")]
+    [SerializeField] private Gradient starColorGradient;
+
+    [Tooltip("Fallback star color used when no gradient is provided.")]
+    [SerializeField] private Color defaultStarColor = Color.white;
+
+    [Tooltip("Minimum radius applied to generated stars.")]
+    [SerializeField] private float minStarRadius = 150f;
+
+    [Tooltip("Maximum radius applied to generated stars.")]
+    [SerializeField] private float maxStarRadius = 350f;
+
     [Tooltip("Minimum allowed distance between two systems.")]
     [SerializeField] private float minSystemDistance = 10f;
 
@@ -134,8 +150,17 @@ public class GalaxyGenerator : MonoBehaviour
         [Tooltip("World-space radius that bounds gameplay within this system.")]
         public float systemRadius = 4000f;
 
+        [Tooltip("Tint color for the system's primary star visual.")]
+        public Color starColor = Color.white;
+
+        [Tooltip("Radius applied to the system's primary star visual.")]
+        public float starRadius = 200f;
+
         [Tooltip("Runtime instance created from the configured star system prefab.")]
         public StarSystem starSystemInstance;
+
+        [Tooltip("Primary star instance spawned as a child of the star system (if configured).")]
+        public PrimaryStar primaryStarInstance;
     }
 
     [Serializable]
@@ -272,10 +297,13 @@ public class GalaxyGenerator : MonoBehaviour
             faction = SampleFaction(id),
             hazardLevel = SampleHazardLevel(id),
             knownStations = SampleStations(id),
-            systemRadius = radius
+            systemRadius = radius,
+            starColor = SampleStarColor(id),
+            starRadius = SampleStarRadius(id)
         };
 
         node.starSystemInstance = SpawnStarSystemInstance(node);
+        node.primaryStarInstance = node.starSystemInstance != null ? node.starSystemInstance.PrimaryStar : null;
 
         systems.Add(node);
 
@@ -340,6 +368,39 @@ public class GalaxyGenerator : MonoBehaviour
     }
 
     /// <summary>
+    /// Selects a deterministic color for a system's star based on its identifier.
+    /// </summary>
+    /// <param name="systemId">Identifier of the system being generated.</param>
+    /// <returns>Color applied to the primary star visual.</returns>
+    private Color SampleStarColor(int systemId)
+    {
+        if (starColorGradient != null && starColorGradient.colorKeys != null && starColorGradient.colorKeys.Length > 0)
+        {
+            float t = Mathf.Abs(systemId * 0.173f) % 1f;
+            return starColorGradient.Evaluate(t);
+        }
+
+        return defaultStarColor;
+    }
+
+    /// <summary>
+    /// Computes a deterministic radius for a system's star within configured bounds.
+    /// </summary>
+    /// <param name="systemId">Identifier of the system being generated.</param>
+    /// <returns>Radius value clamped between configured minimum and maximum.</returns>
+    private float SampleStarRadius(int systemId)
+    {
+        float clampedMin = Mathf.Max(0f, Mathf.Min(minStarRadius, maxStarRadius));
+        float clampedMax = Mathf.Max(clampedMin, Mathf.Max(minStarRadius, maxStarRadius));
+
+        if (Mathf.Approximately(clampedMin, clampedMax))
+            return clampedMin;
+
+        float t = Mathf.Abs(systemId * 0.311f) % 1f;
+        return Mathf.Lerp(clampedMin, clampedMax, t);
+    }
+
+    /// <summary>
     /// Spawn a star system prefab instance using generated data.
     /// </summary>
     /// <param name="node">System metadata used for initialization.</param>
@@ -352,7 +413,32 @@ public class GalaxyGenerator : MonoBehaviour
         Vector3 position = new Vector3(node.position.x, 0f, node.position.y);
         StarSystem instance = Instantiate(starSystemPrefab, position, Quaternion.identity, transform);
         instance.Initialize(node.id, node.displayName, node.systemRadius);
+
+        PrimaryStar primaryStar = SpawnPrimaryStar(node, instance);
+        if (primaryStar != null)
+        {
+            instance.AttachPrimaryStar(primaryStar);
+        }
+
         return instance;
+    }
+
+    /// <summary>
+    /// Spawns the configured primary star prefab as a child of the star system instance.
+    /// </summary>
+    /// <param name="node">System metadata used to drive star visuals.</param>
+    /// <param name="systemInstance">Parent system instance that owns the star.</param>
+    /// <returns>Instantiated <see cref="PrimaryStar"/> or null if no prefab is configured.</returns>
+    private PrimaryStar SpawnPrimaryStar(SystemNode node, StarSystem systemInstance)
+    {
+        if (primaryStarPrefab == null || systemInstance == null)
+            return null;
+
+        PrimaryStar primaryStar = Instantiate(primaryStarPrefab, systemInstance.transform);
+        primaryStar.transform.localPosition = Vector3.zero;
+        primaryStar.Configure(node.starColor, node.starRadius);
+
+        return primaryStar;
     }
 
     private Vector2 SamplePoissonCandidate(Vector2 center)

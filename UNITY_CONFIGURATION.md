@@ -44,3 +44,9 @@ Follow these steps to wire the new dual-mode map UI (system + galaxy) into your 
 ## Background setup – static starfield
 
 - Add `SpaceBackgroundController` to an empty GameObject in your scene and assign a skybox face texture; leave **Apply Skybox** enabled to generate the six-sided backdrop automatically.
+
+## Primary star prefab
+
+- Create a star prefab with the `PrimaryStar` component and assign its visual/light references as needed (visual root, optional renderer, optional light).
+- In `GalaxyGenerator`, set **Primary Star Prefab** to this prefab so each generated system spawns it at its origin.
+- Configure **Star Color Gradient** (or leave blank to use the default color) and adjust **Min/Max Star Radius** to fit your desired star sizes.
