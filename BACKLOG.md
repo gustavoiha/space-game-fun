@@ -75,9 +75,9 @@ Each task has an ID (e.g. `M1.1`) so tools and humans can reference them unambig
 
 **Goal:** Establish minimal in-system visuals so players can orient themselves: readable stars, backgrounds, and major points of interest.
 
-- **M0A.1 – Space Background (skybox/parallax) (IMPLEMENTED)**
-  - Added reusable parallax starfield layers and generated skybox support via `SpaceBackgroundController` plus bundled starfield textures.
-  - Documented setup notes for assigning the background and tuning performance-friendly settings.
+- **M0A.1 – Space Background (static starfield) (IMPLEMENTED)**
+  - Add a single static starfield background usable across systems.
+  - Ensure performance-friendly settings and document any required materials/textures.
 
 - **M0A.2 – Primary Star Visual [new]**
   - Create a basic 3D star using a mesh plus sprite/texture overlay for glow.
