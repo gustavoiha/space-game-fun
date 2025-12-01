@@ -20,6 +20,7 @@ The backlog has been updated to reflect a **multi-scene, multi-physics star syst
 ### B2 - Map UI player ship movement
   - Player ship icon in the star system map does not track player ship and looks still.
 
+### B3 - In-system star renders as sphere with no texture or materials
 ---
 
 ## Milestone 0 – Stabilize Current Prototype (Gates, Discovery, Map)
