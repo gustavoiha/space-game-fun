@@ -24,4 +24,5 @@ ProjectSettings/
 *.swp
 *.log
 *.meta
+*.mat
 .DS_Store

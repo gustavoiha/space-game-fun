@@ -1,4 +1,6 @@
-# Unity Configuration – Star System Map
+# Unity Configuration
+
+## Star System Map
 
 Follow these steps to wire the new dual-mode map UI (system + galaxy) into your scene:
 

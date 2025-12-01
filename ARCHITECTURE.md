@@ -34,6 +34,8 @@ Core ideas:
   - `GalaxyMapToggle.cs`
 - **UI / Contextual Prompts**
   - (Logic integrated into `ShipWormholeNavigator` and/or dedicated prompt UI components, depending on the current iteration.)
+- **Visuals / Environment**
+  - `SpaceBackgroundController.cs`
 
 ---
 
@@ -402,6 +404,27 @@ High-level behaviour:
 5. **Map Interaction**
    - Player uses the map toggle input action.
    - `GalaxyMapToggle` enables/disables the map canvas and ensures the view is up to date.
+
+---
+
+## Visuals / Environment: `SpaceBackgroundController.cs`
+
+### Responsibility
+
+- Provides a reusable space backdrop for in-system scenes via a generated six-sided skybox.
+- Offsets parallax starfield layers relative to camera motion to keep depth hints without heavy particle effects.
+
+### Dependencies & Usage
+
+- **Depends on:**
+  - The active scene camera (`Camera.main` by default, configurable through the inspector).
+  - One or more renderers using tiling unlit materials for parallax layers.
+
+- **Used by:**
+  - Any scene that needs low-overhead background stars without per-system setup.
+
+- **Design Notes:**
+  - Layers are ordered nearest to farthest; tweak their motion multipliers to tune drift speed and depth.
 
 ---
 
