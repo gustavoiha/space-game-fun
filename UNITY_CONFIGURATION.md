@@ -43,4 +43,4 @@ Follow these steps to wire the new dual-mode map UI (system + galaxy) into your 
 
 ## Background setup – static starfield
 
-- Assign your static starfield material or skybox to the main camera/environment lighting so the backdrop renders without parallax motion.
+- Add `SpaceBackgroundController` to an empty GameObject in your scene and assign a skybox face texture; leave **Apply Skybox** enabled to generate the six-sided backdrop automatically.

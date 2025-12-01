@@ -412,19 +412,17 @@ High-level behaviour:
 ### Responsibility
 
 - Provides a reusable space backdrop for in-system scenes via a generated six-sided skybox.
-- Offsets parallax starfield layers relative to camera motion to keep depth hints without heavy particle effects.
 
 ### Dependencies & Usage
 
 - **Depends on:**
-  - The active scene camera (`Camera.main` by default, configurable through the inspector).
-  - One or more renderers using tiling unlit materials for parallax layers.
+  - A skybox-capable render pipeline with access to the built-in **Skybox/6 Sided** shader.
 
 - **Used by:**
   - Any scene that needs low-overhead background stars without per-system setup.
 
 - **Design Notes:**
-  - Layers are ordered nearest to farthest; tweak their motion multipliers to tune drift speed and depth.
+  - Assign a high-resolution skybox face texture for the cleanest results.
 
 ---
 
