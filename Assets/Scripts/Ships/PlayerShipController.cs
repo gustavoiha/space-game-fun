@@ -20,11 +20,18 @@ public class PlayerShipController : MonoBehaviour
     public float damping = 1f;
 
     [Header("Bounds")]
-    [Tooltip("Radius of the playable space around the current star system center.")]
+    [Tooltip("Fallback radius of the playable space if no system data is available.")]
     [FormerlySerializedAs("worldExtent")]
-    [SerializeField] private float systemBoundaryRadius = 5000f;
+    [SerializeField] private float fallbackSystemBoundaryRadius = 4000f;
+
+    private float systemBoundaryRadius = 0f;
 
     private Vector3 velocity = Vector3.zero;
+
+    private void Awake()
+    {
+        systemBoundaryRadius = Mathf.Max(fallbackSystemBoundaryRadius, 0f);
+    }
 
     private void Update()
     {
@@ -68,6 +75,15 @@ public class PlayerShipController : MonoBehaviour
         velocity = Vector3.Lerp(velocity, Vector3.zero, damping * Time.deltaTime);
 
         ConstrainToSystemBounds();
+    }
+
+    /// <summary>
+    /// Set the radius used to constrain the ship to the active star system.
+    /// </summary>
+    /// <param name="radius">Radius in world units.</param>
+    public void SetSystemBoundaryRadius(float radius)
+    {
+        systemBoundaryRadius = Mathf.Max(radius, 0f);
     }
 
     /// <summary>

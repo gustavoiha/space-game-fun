@@ -148,6 +148,7 @@ Each task has an ID (e.g. `M1.1`) so tools and humans can reference them unambig
     - Galaxy map should appear centered in star system that was zoomed in.
   - When zooming in close to a star, in the galaxy mode:
     - Map UI will switch to star system map.
+    - The system selected for the zoom-in transition is the one closest to the current zoom pivot (mouse pointer), falling back to the view center if needed.
   - Clicking on a star will also open its star system map.
 
 ### M2 – Interaction

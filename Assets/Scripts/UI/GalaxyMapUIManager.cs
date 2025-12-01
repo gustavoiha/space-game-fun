@@ -76,13 +76,16 @@ public class GalaxyMapUIManager : MonoBehaviour
 
     [Header("Mode Switching")]
     [Tooltip("Zoom threshold below which the map switches from system view to galaxy view when zooming out.")]
-    [SerializeField] private float systemToGalaxyZoomThreshold = 0.7f;
+    [SerializeField] private float systemToGalaxyZoomThreshold = 0.55f;
 
     [Tooltip("Zoom threshold above which the map switches from galaxy view to system view when zooming in.")]
     [SerializeField] private float galaxyToSystemZoomThreshold = 1.05f;
 
-    [Tooltip("Approximate world-space radius represented by the system map circle.")]
-    [SerializeField] private float systemMapWorldRadius = 60f;
+    [Tooltip("Minimum zoom applied when entering the galaxy map so it does not appear too small.")]
+    [SerializeField] private float minimumGalaxyViewZoom = 0.95f;
+
+    [Tooltip("Reference world-space radius represented by the system map circle. Actual systems scale relative to this size.")]
+    [SerializeField] private float systemMapWorldRadius = 4000f;
 
     [Header("Map Toggle (New Input System)")]
     [Tooltip("Input action used to toggle the map (bind this to the M key in your Input Actions asset).")]
@@ -104,6 +107,8 @@ public class GalaxyMapUIManager : MonoBehaviour
     private float currentZoom = 1f;
     private bool isDragging;
     private Vector2 lastMousePosition;
+    private Vector2 lastPointerMapPosition;
+    private bool hasPointerMapPosition;
 
     private MapMode currentMode = MapMode.System;
     private int activeSystemMapSystemId = -1;
@@ -543,7 +548,7 @@ public class GalaxyMapUIManager : MonoBehaviour
             mapContentRect.localScale = Vector3.one * currentZoom;
 
         if (systemMapContentRect != null)
-            systemMapContentRect.localScale = Vector3.one * currentZoom;
+            systemMapContentRect.localScale = Vector3.one * currentZoom * GetSystemMapScale();
     }
 
     private void FocusOnSystem(int systemId)
@@ -583,12 +588,15 @@ public class GalaxyMapUIManager : MonoBehaviour
         if (contentRect != null && hasPointer)
         {
             Vector2 offsetBeforeZoom = (pointerLocal - contentRect.anchoredPosition) / currentZoom;
+            lastPointerMapPosition = offsetBeforeZoom;
+            hasPointerMapPosition = true;
             ApplyZoom(targetZoom);
             contentRect.anchoredPosition = pointerLocal - offsetBeforeZoom * currentZoom;
         }
         else
         {
             ApplyZoom(targetZoom);
+            hasPointerMapPosition = false;
         }
 
         if (clampPanning)
@@ -656,16 +664,68 @@ public class GalaxyMapUIManager : MonoBehaviour
     {
         if (currentMode == MapMode.System && currentZoom <= systemToGalaxyZoomThreshold)
         {
+            currentZoom = Mathf.Max(currentZoom, minimumGalaxyViewZoom);
             SetMode(MapMode.Galaxy, true);
             FocusOnSystem(activeSystemMapSystemId);
+            ApplyZoom(currentZoom);
             if (clampPanning)
                 ClampPanToBounds();
         }
         else if (currentMode == MapMode.Galaxy && currentZoom >= galaxyToSystemZoomThreshold)
         {
+            UpdateActiveSystemFromPointer();
             BuildSystemMap(activeSystemMapSystemId);
             SetMode(MapMode.System, true);
+            ApplyZoom(currentZoom);
         }
+    }
+
+    /// <summary>
+    /// Updates the active system selection based on the system closest to the current zoom pivot.
+    /// Prefers the pointer position (used as the zoom pivot) and falls back to the view center if needed.
+    /// </summary>
+    private void UpdateActiveSystemFromPointer()
+    {
+        if (galaxy == null || galaxy.Systems == null || galaxy.Systems.Count == 0 || mapContentRect == null)
+            return;
+
+        Vector2 viewCenterMapPos = -mapContentRect.anchoredPosition;
+        int closestSystemId = hasPointerMapPosition
+            ? FindClosestSystemToMapPoint(lastPointerMapPosition)
+            : FindClosestSystemToMapPoint(viewCenterMapPos);
+
+        if (closestSystemId < 0)
+        {
+            closestSystemId = FindClosestSystemToMapPoint(viewCenterMapPos);
+        }
+
+        if (closestSystemId >= 0)
+        {
+            activeSystemMapSystemId = closestSystemId;
+        }
+    }
+
+    /// <summary>
+    /// Returns the system ID whose icon is closest to the provided map-space point.
+    /// </summary>
+    private int FindClosestSystemToMapPoint(Vector2 mapPoint)
+    {
+        float bestDistance = float.MaxValue;
+        int bestId = -1;
+
+        foreach (var system in galaxy.Systems)
+        {
+            Vector2 systemMapPos = GalaxyToMapPosition(system.position);
+            float sqrDistance = (systemMapPos - mapPoint).sqrMagnitude;
+
+            if (sqrDistance < bestDistance)
+            {
+                bestDistance = sqrDistance;
+                bestId = system.id;
+            }
+        }
+
+        return bestId;
     }
 
     private void RefreshSystemVisuals()
@@ -848,6 +908,7 @@ public class GalaxyMapUIManager : MonoBehaviour
         EnsurePlayerShipIcon();
         RefreshSystemMapVisuals();
         UpdatePlayerShipIconPosition();
+        ApplyZoom(currentZoom);
     }
 
     private void CreateSystemWormholeIcons(int systemId, Vector2 systemPosition)
@@ -944,8 +1005,31 @@ public class GalaxyMapUIManager : MonoBehaviour
         return 100f;
     }
 
+    private float GetSystemMapScale()
+    {
+        float targetWorldRadius = GetSystemMapWorldRadius();
+        float referenceWorldRadius = Mathf.Max(systemMapWorldRadius, 0.001f);
+
+        if (targetWorldRadius <= 0.001f)
+            return 1f;
+
+        return referenceWorldRadius / targetWorldRadius;
+    }
+
     private float GetSystemMapWorldRadius()
     {
+        if (galaxy != null && activeSystemMapSystemId >= 0 &&
+            galaxy.SystemsById.TryGetValue(activeSystemMapSystemId, out var systemNode) &&
+            systemNode.systemRadius > 0f)
+        {
+            return systemNode.systemRadius;
+        }
+
+        if (GameManager.Instance != null && GameManager.Instance.CurrentSystemRadius > 0f)
+        {
+            return GameManager.Instance.CurrentSystemRadius;
+        }
+
         if (GameManager.Instance != null && GameManager.Instance.GateRingRadius > 0f)
         {
             return GameManager.Instance.GateRingRadius;

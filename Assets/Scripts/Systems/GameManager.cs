@@ -54,11 +54,13 @@ public class GameManager : MonoBehaviour
 
     private bool hasAlignedInitialShipPosition;
     private Vector3 currentSystemWorldPosition = Vector3.zero;
+    private float currentSystemRadius;
 
     public int CurrentSystemId => discoveryState != null ? discoveryState.CurrentSystemId : -1;
     public GameObject PlayerShip => playerShipInstance;
     public Vector3 CurrentSystemWorldPosition => currentSystemWorldPosition;
     public float GateRingRadius => gateRingRadius;
+    public float CurrentSystemRadius => currentSystemRadius;
 
     private void Awake()
     {
@@ -155,6 +157,7 @@ public class GameManager : MonoBehaviour
     private void OnCurrentSystemChanged(int systemId)
     {
         UpdateCurrentSystemLabel(systemId);
+        UpdateCurrentSystemRadius(systemId);
         BuildWormholeGatesForSystem(systemId);
 
         if (!hasAlignedInitialShipPosition && playerShipInstance != null && systemId >= 0)
@@ -162,6 +165,8 @@ public class GameManager : MonoBehaviour
             playerShipInstance.transform.position = GetSystemWorldPosition(systemId);
             hasAlignedInitialShipPosition = true;
         }
+
+        UpdatePlayerBoundaryRadius();
     }
 
     private void UpdateCurrentSystemLabel(int systemId)
@@ -268,6 +273,36 @@ public class GameManager : MonoBehaviour
 
             activeGates.Add(gateInstance);
         }
+    }
+
+    /// <summary>
+    /// Cache the current system radius so other systems (map, ship bounds) can react.
+    /// </summary>
+    /// <param name="systemId">Active system identifier.</param>
+    private void UpdateCurrentSystemRadius(int systemId)
+    {
+        currentSystemRadius = 0f;
+
+        if (galaxy != null && galaxy.TryGetSystem(systemId, out var node))
+        {
+            currentSystemRadius = Mathf.Max(node.systemRadius, 0f);
+        }
+    }
+
+    /// <summary>
+    /// Push the active system radius into the player ship controller to keep the ship within bounds.
+    /// </summary>
+    private void UpdatePlayerBoundaryRadius()
+    {
+        if (playerShipInstance == null)
+            return;
+
+        var shipController = playerShipInstance.GetComponent<PlayerShipController>();
+        if (shipController == null)
+            return;
+
+        float radiusToApply = currentSystemRadius > 0f ? currentSystemRadius : gateRingRadius;
+        shipController.SetSystemBoundaryRadius(radiusToApply);
     }
 
     /// <summary>

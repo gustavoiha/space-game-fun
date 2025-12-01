@@ -76,6 +76,7 @@ Assets/
   - Display name.
   - 3D position in world/galaxy space (used both for scene layout and 2D map projection).
   - Metadata hooks (e.g. starting system flag, difficulty, faction control) for later expansion.
+  - Generated playable radius (3–5k world units) stored on a `StarSystem` prefab instance for map fitting and ship bounds.
 
 - **Wormhole Link**
   - Unique identifier (e.g. `string wormholeId`).
@@ -296,6 +297,7 @@ tions.
   - Always opens in the system view by default and builds the star layout for the active system.
   - Renders wormhole icons around the system boundary using the direction to neighboring systems (with IDs pulled from `GalaxyGenerator`).
   - Shows a ship icon positioned relative to the system center when the active system matches `GameDiscoveryState.currentSystemId` and a player ship exists in the scene.
+  - When zooming in from the galaxy view, chooses the system nearest to the current zoom pivot (mouse pointer) to open in the system view, falling back to the view center if the pointer data is unavailable.
   - Switches between system view and galaxy view when zoom passes configurable thresholds or when a user clicks on a system icon in the galaxy view.
 
 - **Current System Highlight**

@@ -17,11 +17,20 @@ public class GalaxyGenerator : MonoBehaviour
     [Header("Generation Settings")]
     [SerializeField] private int targetSystemCount = 40;
 
+    [Tooltip("Prefab used to represent an individual generated star system.")]
+    [SerializeField] private StarSystem starSystemPrefab;
+
     [Tooltip("Minimum allowed distance between two systems.")]
     [SerializeField] private float minSystemDistance = 10f;
 
     [Tooltip("Maximum allowed distance between two systems.")]
     [SerializeField] private float maxSystemDistance = 60f;
+
+    [Tooltip("Minimum playable radius assigned to generated star systems.")]
+    [SerializeField] private float minSystemRadius = 3000f;
+
+    [Tooltip("Maximum playable radius assigned to generated star systems.")]
+    [SerializeField] private float maxSystemRadius = 5000f;
 
     [Tooltip("How many candidate points to try per active site in Poisson sampling.")]
     [SerializeField] private int poissonCandidatesPerPoint = 12;
@@ -79,6 +88,12 @@ public class GalaxyGenerator : MonoBehaviour
 
         [Tooltip("Optional display name; can be generated or assigned later.")]
         public string displayName;
+
+        [Tooltip("World-space radius that bounds gameplay within this system.")]
+        public float systemRadius = 4000f;
+
+        [Tooltip("Runtime instance created from the configured star system prefab.")]
+        public StarSystem starSystemInstance;
     }
 
     [Serializable]
@@ -203,17 +218,40 @@ public class GalaxyGenerator : MonoBehaviour
     {
         int id = systems.Count; // ID == index for now, stable within this generated galaxy
 
+        float clampedMinRadius = Mathf.Min(minSystemRadius, maxSystemRadius);
+        float clampedMaxRadius = Mathf.Max(minSystemRadius, maxSystemRadius);
+        float radius = UnityEngine.Random.Range(clampedMinRadius, clampedMaxRadius);
+
         var node = new SystemNode
         {
             id = id,
             position = position,
-            displayName = $"SYS-{id:D3}"
+            displayName = $"SYS-{id:D3}",
+            systemRadius = radius
         };
+
+        node.starSystemInstance = SpawnStarSystemInstance(node);
 
         systems.Add(node);
 
         MinPosition = Vector2.Min(MinPosition, position);
         MaxPosition = Vector2.Max(MaxPosition, position);
+    }
+
+    /// <summary>
+    /// Spawn a star system prefab instance using generated data.
+    /// </summary>
+    /// <param name="node">System metadata used for initialization.</param>
+    /// <returns>Instantiated <see cref="StarSystem"/> or null if no prefab is configured.</returns>
+    private StarSystem SpawnStarSystemInstance(SystemNode node)
+    {
+        if (starSystemPrefab == null)
+            return null;
+
+        Vector3 position = new Vector3(node.position.x, 0f, node.position.y);
+        StarSystem instance = Instantiate(starSystemPrefab, position, Quaternion.identity, transform);
+        instance.Initialize(node.id, node.displayName, node.systemRadius);
+        return instance;
     }
 
     private Vector2 SamplePoissonCandidate(Vector2 center)
