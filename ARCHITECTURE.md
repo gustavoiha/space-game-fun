@@ -31,9 +31,9 @@ Core ideas:
   - `GalaxyGenerator.cs`
 - **Game State**
   - `GameDiscoveryState.cs`
-- **Simulation / Scenes**
-  - `GalaxySimulationManager.cs` *(NEW, implemented)*
-  - `StarSystemRuntime.cs` *(NEW, implemented)*
+  - `GalaxySimulationManager.cs`
+  - `StarSystemRuntime.cs`
+  - `GameManager.cs`
 - **World / Gameplay**
   - `PlayerShipController.cs`
   - `WormholeGate.cs`

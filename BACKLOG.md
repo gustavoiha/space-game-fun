@@ -209,6 +209,10 @@ The backlog has been updated to reflect a **multi-scene, multi-physics star syst
   - By default, the map opens in the local star system view.
   - Handles smooth switching between system view and galaxy view based on zoom.
 
+- **M2.10 – Galaxy Map State Container (TODO)**
+  - Extract galaxy map data (systems, factions, hazards, ownership flags) into a dedicated `GalaxyState.cs` script separate from UI.
+  - Keep `GalaxyMapUIManager` reading from this state container (backed by `GalaxyGenerator`/discovery data) rather than storing map state internally.
+
 ### M2 – Interaction
 
 - **M2.6 – System Selection (IMPLEMENTED)**
