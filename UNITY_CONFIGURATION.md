@@ -1,24 +1,18 @@
 # Unity Configuration
 
-## Basic setup [TODO]
-- Create ship prefab
-
-## Basic Space Scene Setup [TODO]
-1. **Create the scene**
+## Basic Space Scene Setup
+1. Create the scene [DONE]
    - Make a new scene named `SpaceSandbox`.
    - Set the root of the world at `(0,0,0)`; keep it clear for spawn calculations.
 
-2. **Input axes (old Input Manager)**
-   - Open **Edit → Project Settings → Input Manager**.
-   - Add/confirm the following axes to mirror X4 Foundations style controls:
-     - `Vertical`: Positive = `W`, Negative = `S`, Gravity = 3, Sensitivity = 3, Type = Key/Mouse Button.
-     - `Horizontal`: Positive = `D`, Negative = `A`, Gravity = 3, Sensitivity = 3, Type = Key/Mouse Button (strafe left/right).
-     - `StrafeVertical`: Positive = `Space`, Negative = `Left Control`, Gravity = 3, Sensitivity = 3, Type = Key/Mouse Button (vertical strafe).
-     - `Mouse X`: default settings (yaw with mouse).
-     - `Mouse Y`: default settings (pitch with mouse, inverted handled in the axis settings if desired).
-     - `Roll`: Positive = `E`, Negative = `Q`, Gravity = 3, Sensitivity = 3, Type = Key/Mouse Button.
+2. Input System bindings [DONE]
+   - Open **Edit → Project Settings → Player → Other Settings** and confirm **Active Input Handling** is set to **Input System Package (New)**.
+   - The flight controller reads devices directly via the Input System:
+     - Keyboard defaults: `W/S` throttle, `A/D` yaw (also feeds horizontal strafe), `Up/Down Arrow` pitch, `Space/Left Ctrl` vertical strafe, `Q/E` roll.
+     - Mouse delta drives pitch (Y) and yaw (X); adjust sensitivity on **PlayerShipController → Mouse Sensitivity** if needed. If you want yaw-only on `A/D` without horizontal strafe, lower **Strafe Acceleration** or rebind **Horizontal Strafe Keys** in the inspector. To disable keyboard pitch, set **Pitch Keys** to `None/None` or change them to your preference.
+   - No legacy Input Manager axes are required.
 
-3. **Player ship prefab**
+3. Player ship prefab [DONE]
    - Create an empty GameObject named `PlayerShip` and reset its transform.
    - Add visuals (placeholder mesh or finalized model) as a child named `Hull`.
    - Add **Rigidbody** (Use Gravity = false, Drag = 0, Angular Drag ≈ 0.1).
@@ -32,30 +26,31 @@
      - Rotation Smoothing: ~8
    - Save the GameObject as a prefab in `Assets/Prefabs/Ships/PlayerShip.prefab`.
 
-4. **Player spawn placement (manual)**
-   - Create an empty GameObject named `SpawnController` at the world origin.
-   - Parent the player ship prefab instance under `SpawnController` and position/rotate it exactly where you want the player to begin.
-   - If you later want a randomized start (for non-player objects), add **RandomizedSpawnRadius** (Assets/Scripts/Environment/RandomizedSpawnRadius.cs) and enable **Randomize On Start**.
-
-5. **Space backdrop (stars only)**
+4. Space backdrop (stars only)
    - Import a high-resolution starfield skybox or HDRI (no nebulas/clouds). Recommended: a 4k–8k star-only cubemap or HDRI from a reputable source (e.g., NASA star catalogs or a “realistic starfield” pack).
    - Create a **Skybox/Cubemap** or **Skybox/Panoramic** material named `StarfieldSkybox` in `Assets/Materials/Environment/` and assign the star texture(s).
    - In **Window → Rendering → Lighting → Environment**, set the Skybox Material to `StarfieldSkybox` and reduce Ambient Intensity (~0.3) to keep ships readable.
    - Disable fog in the Lighting settings to keep the view clear.
+   - If you need to generate a star-only HDRI locally (offline, no nebulas):
+     1. In Blender, create a new scene, delete the default cube, and open the **Shader Editor → World**. Set **Background Color** to black.
+     2. Add a **Noise Texture** node (Scale ~1500, Detail 0, Roughness 0), feed it into a **ColorRamp**, and set the ramp to a sharp/step contrast so only small white points remain (these are the stars).
+     3. Set the camera to **Panoramic → Equirectangular**, resolution to **8192 × 4096**, and render with Cycles (samples ~64–128). Save as **16-bit EXR/HDR** (e.g., `Starfield_8k.hdr`).
+     4. In Unity, import the HDRI, set **Texture Type: Default**, **sRGB (Color Texture): On**, and create a **Skybox/Panoramic** material referencing it. Assign that material to Lighting → Skybox.
 
-6. **Camera setup**
+
+5. Camera setup
    - Add a Cinemachine FreeLook or standard Camera as a child of the player ship.
    - Position slightly behind and above the hull (e.g., `(0, 2, -8)`) and enable smooth follow for stable X4-like control feel.
    - Ensure the camera’s Clear Flags are set to **Skybox** to render the starfield.
 
-7. **Testing checklist**
+6. Testing checklist
    - Enter Play Mode and verify:
      - Mouse moves pitch/yaw responsively; Q/E rolls the ship.
      - W/S throttle forward/back; A/D strafe left/right; Space/Ctrl strafe up/down.
      - The ship spawns at the manually placed location under `SpawnController`.
      - The skybox shows sharp stars with no nebula or cloud visuals.
 
-8. **Future polish (optional)**
+7. Future polish (optional)
    - Add gentle camera shake on acceleration/roll for feedback.
    - Replace placeholder hull visuals with faction-appropriate Horizon Initiative assets.
    - Add UI throttle/velocity readouts once HUD work begins.

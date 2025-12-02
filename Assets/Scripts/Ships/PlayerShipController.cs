@@ -1,10 +1,18 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace SpaceGame.Ships
 {
     [RequireComponent(typeof(Rigidbody))]
     public class PlayerShipController : MonoBehaviour
     {
+        [System.Serializable]
+        private struct AxisKeys
+        {
+            public Key positive;
+            public Key negative;
+        }
+
         [Header("Movement")]
         [SerializeField] private float forwardAcceleration = 50f;
         [SerializeField] private float strafeAcceleration = 30f;
@@ -17,13 +25,16 @@ namespace SpaceGame.Ships
         [SerializeField] private float rollSpeed = 70f;
         [SerializeField] private float rotationSmoothing = 8f;
 
-        [Header("Input Axes")]
-        [SerializeField] private string throttleAxis = "Vertical";
-        [SerializeField] private string horizontalStrafeAxis = "Horizontal";
-        [SerializeField] private string verticalStrafeAxis = "StrafeVertical";
-        [SerializeField] private string pitchAxis = "Mouse Y";
-        [SerializeField] private string yawAxis = "Mouse X";
-        [SerializeField] private string rollAxis = "Roll";
+        [Header("Keyboard Bindings")]
+        [SerializeField] private AxisKeys throttleKeys = new AxisKeys { positive = Key.W, negative = Key.S };
+        [SerializeField] private AxisKeys horizontalStrafeKeys = new AxisKeys { positive = Key.D, negative = Key.A };
+        [SerializeField] private AxisKeys verticalStrafeKeys = new AxisKeys { positive = Key.Space, negative = Key.LeftCtrl };
+        [SerializeField] private AxisKeys pitchKeys = new AxisKeys { positive = Key.UpArrow, negative = Key.DownArrow };
+        [SerializeField] private AxisKeys yawKeys = new AxisKeys { positive = Key.D, negative = Key.A };
+        [SerializeField] private AxisKeys rollKeys = new AxisKeys { positive = Key.E, negative = Key.Q };
+
+        [Header("Mouse Bindings")]
+        [SerializeField] private float mouseSensitivity = 0.02f;
 
         private Rigidbody _rigidbody;
 
@@ -43,9 +54,9 @@ namespace SpaceGame.Ships
 
         private void ApplyTranslation()
         {
-            float throttleInput = Input.GetAxisRaw(throttleAxis);
-            float strafeInput = Input.GetAxisRaw(horizontalStrafeAxis);
-            float verticalInput = Input.GetAxisRaw(verticalStrafeAxis);
+            float throttleInput = ReadAxis(throttleKeys);
+            float strafeInput = ReadAxis(horizontalStrafeKeys);
+            float verticalInput = ReadAxis(verticalStrafeKeys);
 
             Vector3 thrustDirection = (transform.forward * throttleInput * forwardAcceleration) +
                                       (transform.right * strafeInput * strafeAcceleration) +
@@ -63,15 +74,51 @@ namespace SpaceGame.Ships
 
         private void ApplyRotation()
         {
-            float pitchInput = Input.GetAxisRaw(pitchAxis);
-            float yawInput = Input.GetAxisRaw(yawAxis);
-            float rollInput = Input.GetAxisRaw(rollAxis);
+            Vector2 mouseDelta = ReadMouseDelta();
+            float pitchInput = mouseDelta.y + ReadAxis(pitchKeys);
+            float yawInput = mouseDelta.x + ReadAxis(yawKeys);
+            float rollInput = ReadAxis(rollKeys);
 
-            Vector3 desiredAngular = new Vector3(-pitchInput * pitchSpeed, yawInput * yawSpeed, -rollInput * rollSpeed);
-            Vector3 desiredRadians = desiredAngular * Mathf.Deg2Rad;
+            Vector3 desiredLocalAngular = new Vector3(-pitchInput * pitchSpeed, yawInput * yawSpeed, -rollInput * rollSpeed);
+            Vector3 desiredRadians = desiredLocalAngular * Mathf.Deg2Rad;
+            Vector3 desiredWorldAngular = transform.TransformDirection(desiredRadians);
 
-            Vector3 smoothedAngularVelocity = Vector3.Lerp(_rigidbody.angularVelocity, desiredRadians, rotationSmoothing * Time.fixedDeltaTime);
+            Vector3 smoothedAngularVelocity = Vector3.Lerp(_rigidbody.angularVelocity, desiredWorldAngular, rotationSmoothing * Time.fixedDeltaTime);
             _rigidbody.angularVelocity = smoothedAngularVelocity;
+        }
+
+        private float ReadAxis(AxisKeys axisKeys)
+        {
+            Keyboard keyboard = Keyboard.current;
+            if (keyboard == null)
+            {
+                return 0f;
+            }
+
+            float value = 0f;
+
+            if (axisKeys.positive != Key.None && keyboard[axisKeys.positive].isPressed)
+            {
+                value += 1f;
+            }
+
+            if (axisKeys.negative != Key.None && keyboard[axisKeys.negative].isPressed)
+            {
+                value -= 1f;
+            }
+
+            return value;
+        }
+
+        private Vector2 ReadMouseDelta()
+        {
+            Mouse mouse = Mouse.current;
+            if (mouse == null)
+            {
+                return Vector2.zero;
+            }
+
+            return mouse.delta.ReadValue() * mouseSensitivity;
         }
     }
 }

@@ -5,15 +5,15 @@ This document describes the main C# scripts in the Unity Wormhole Era prototype 
 ## Scripts
 
 ### Assets/Scripts/Ships/PlayerShipController.cs
-- **Purpose:** Handles six-degree-of-freedom player flight with X4 Foundations-style controls using the classic Input Manager.
+- **Purpose:** Handles six-degree-of-freedom player flight with X4 Foundations-style controls using the Unity Input System (keyboard + mouse delta).
 - **Responsibilities:**
-  - Reads throttle, strafe, pitch, yaw, and roll input axes.
+  - Reads throttle, strafe, pitch, yaw, and roll input directly from `Keyboard`/`Mouse` devices (mouse delta plus optional keyboard pitch on arrows and yaw on `A/D`).
   - Applies forces/torques through a Rigidbody to move the ship with configurable acceleration, speed caps, and inertial damping.
-  - Smooths angular velocity for stable camera/aiming behavior.
+  - Smooths angular velocity for stable camera/aiming behavior, applying rotation in the ship’s local space so yaw follows the current roll orientation.
 - **Key Configurable Fields:**
   - `forwardAcceleration`, `strafeAcceleration`, `maxSpeed`, `inertialDamping`
   - `pitchSpeed`, `yawSpeed`, `rollSpeed`, `rotationSmoothing`
-  - Input axis names (`Vertical`, `Horizontal`, `StrafeVertical`, `Mouse X`, `Mouse Y`, `Roll`).
+  - Keyboard bindings (`W/S` throttle, `A/D` yaw + horizontal strafe, `Space/Ctrl` vertical strafe, `Q/E` roll) and `mouseSensitivity` applied to mouse delta for pitch/yaw.
 
 ### Assets/Scripts/Environment/RandomizedSpawnRadius.cs
 - **Purpose:** Optionally places an object at a random point around a center within a configurable radial band.
