@@ -1,11 +1,5 @@
 .vscode/
 SpaceGame.slnx/
-Assets/Materials/
-Assets/Prefabs/
-Assets/Scenes/
-Assets/Sprites/
-Assets/InputSystem_Actions.inputactions
-Assets/TextMesh Pro/
 Library/**/*
 Temp/
 UserSettings/
@@ -18,6 +12,8 @@ ProjectSettings/
 *.pidb
 *.suo
 *.userprefs
+*.prefab
+*.inputactions
 *.unity
 *.slnx
 *.tmp
