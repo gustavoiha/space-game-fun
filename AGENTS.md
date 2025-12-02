@@ -30,7 +30,6 @@ This repository contains a retro-futuristic space exploration and reconstruction
 Before making changes, agents must review and rely on the following files:
 
 * `GAME_LORE.md` – Canonical game lore, factions, tone, and terminology.
-* `ARCHITECTURE.md` – High-level code and system architecture description.
 * `BACKLOG.md` – Task list and prioritisation for features and technical work.
 * `UNITY_CONFIGURATION.md` – Step-by-step scene and project setup instructions.
 
@@ -46,23 +45,18 @@ When working in this repository, agents must:
 
    * Prefer tasks described in `BACKLOG.md`.
    * If you create new work items, add them under the appropriate section with clear titles and short descriptions.
-   * Mark each item with either [TODO] or [DONE].
+   * Mark each item with either [TODO] or [IN_PROGRESS].
 
-2. **Minimise unnecessary changes**
-
-   * Keep diffs focused on the relevant task.
-   * Avoid unrelated refactors unless they are clearly small, safe, and clearly improve quality.
-
-3. **Prefer clarity over cleverness**
+2. **Prefer clarity over cleverness**
 
    * Write code that is easy for human developers to understand.
    * Avoid overcomplicated patterns if simpler solutions are sufficient.
 
-4. **Preserve behaviour unless the task explicitly states otherwise**
+3. **Preserve behaviour unless the task explicitly states otherwise**
 
    * If behaviour changes, document it in code comments and relevant documentation files.
 
-5. **No silent assumptions**
+4. **No silent assumptions**
 
    * If you must make an assumption, encode it as a small comment in the code or in `BACKLOG.md` as a follow-up item.
 
@@ -94,6 +88,7 @@ Agents must follow these guidelines for all Unity C# code:
 * Do not allocate memory every frame inside `Update`; avoid LINQ and `new` allocations in hot paths.
 * Prefer dependency injection and clear references over global singletons where feasible.
 * Document every method, variable and class definition
+* Do not load resources or reference harcoded files in scripts. Instead, use well-described variables that human must assign in Unity.
 * When adding new or changing existing code, verify if redundant code is introduced. Take time to analyze and refactor other parts of the codebase if necessary.
 
 ### 4.3 Safety and Robustness
@@ -107,7 +102,6 @@ Agents must follow these guidelines for all Unity C# code:
 
 * Place scripts in sensible folders that match their purpose (e.g., `Assets/Scripts/Systems/`, `Assets/Scripts/UI/`, `Assets/Scripts/Ships/`).
 * Keep namespaces consistent with folder structure when namespaces are used.
-* When adding a new system, ensure it is reflected in `ARCHITECTURE.md` and that folders are logically named.
 
 ---
 
@@ -128,26 +122,12 @@ Rules:
 * Add new sections with clear headings and short descriptions.
 * Do **not** casually rename existing factions, events, or key terms.
 
-### 5.2 `ARCHITECTURE.md`
-
-Update whenever:
-
-* New systems, managers, or significant subsystems are introduced.
-* Existing systems change responsibilities or relationships.
-* Important scripts are added, renamed, or removed.
-
-Include:
-
-* A short description of the new/changed system.
-* Where the scripts live in the folder hierarchy.
-* How the system interacts with other systems (e.g., input, UI, save/load, fleets).
-
 ### 5.3 `BACKLOG.md`
 
 Update whenever:
 
 * You start working on a backlog item (mark as in-progress if relevant).
-* You complete an item (mark as done and add any notes if behaviour changed).
+* You complete an item (mark as IN_PROGRESS and add any notes if behaviour changed).
 * You discover follow-up work (create new backlog entries and link them to the original task when useful).
 
 Keep entries concise and actionable.
@@ -179,96 +159,34 @@ When updating `UNITY_CONFIGURATION.md`:
 
 Agents must ensure that a human following `UNITY_CONFIGURATION.md` from a clean project can successfully reproduce the working scene.
 
----
+## 6. File-Specific Notes
 
-## 6. Unity Scene and Project Changes: Required Process
-
-Whenever you modify or introduce any Unity scene or project configuration:
-
-1. Apply changes in the Unity Editor.
-2. Save all relevant scenes and assets.
-3. Document all new requirements or steps in `UNITY_CONFIGURATION.md`.
-4. Ensure the order of steps is logical for someone starting from an empty or freshly cloned project.
-5. If you add or change core systems, also update `ARCHITECTURE.md`.
-6. If the change corresponds to a backlog item, update `BACKLOG.md` accordingly.
-
-Do not leave configuration knowledge only in your head or only in comments inside scripts.
-
----
-
-## 7. Verification and Double-Checking
-
-Agents must always double-check their work. At minimum, before considering work complete, perform this checklist:
-
-1. **Compilation**
-
-   * Ensure the project compiles with no errors or new warnings.
-
-2. **Play Mode Sanity Check**
-
-   * Enter Play Mode in the relevant scene(s).
-   * Confirm there are no obvious runtime exceptions (no new errors in the Console).
-   * Verify that the feature or change behaves as described by the backlog item.
-
-3. **Code Review Self-Check**
-
-   * Re-read your diff and check for:
-
-     * Inconsistent naming or style.
-     * Unused variables, imports, or dead code.
-     * Debug logs left in production code.
-
-4. **Documentation**
-
-   * Confirm `GAME_LORE.md`, `ARCHITECTURE.md`, `BACKLOG.md`, and `UNITY_CONFIGURATION.md` are updated as needed.
-   * Confirm instructions are clear, ordered, and actionable.
-
-5. **Edge Cases**
-
-   * Consider simple edge cases (empty lists, null references, missing data).
-   * Handle them gracefully or document them explicitly.
-
----
-
-## 8. File-Specific Notes
-
-### 8.1 GAME_LORE.md
+### 6.1 GAME_LORE.md
 
 * Source of truth for names, factions, events, and narrative tone.
 * When adding mechanics tied to lore (e.g., wormhole networks, factions, alien polities), ensure they are consistent with `GAME_LORE.md`.
 * Keep sections short and structured; avoid lore bloat without gameplay reason.
 
-### 8.2 ARCHITECTURE.md
-
-* Must mirror the actual code architecture.
-* For each major system, document:
-
-  * Purpose and responsibilities.
-  * Key classes and their locations.
-  * How it communicates with other systems.
-* Update when refactoring systems or adding/removing core classes.
-
-### 8.3 BACKLOG.md
+### 6.2 BACKLOG.md
 
 * Use to manage work for both humans and agents.
 * Keep tasks small and understandable.
 * When a task is completed, briefly note what was done if it is not obvious from the title.
 
-### 8.4 UNITY_CONFIGURATION.md
+### 6.3 UNITY_CONFIGURATION.md
 
 * Treat this as the reproducible setup recipe for the project.
 * If a human cannot set up the project and scene by following this document, treat that as a bug.
 
 ---
 
-## 9. Agent Workflow Checklist (TL;DR)
+## 7. Agent Workflow Checklist (TL;DR)
 
 Before starting:
 
 1. Read or refresh:
 
    * `GAME_LORE.md`
-   * `ARCHITECTURE.md`
    * `BACKLOG.md`
    * `UNITY_CONFIGURATION.md`
 2. Pick or define a task in `BACKLOG.md`.
@@ -283,9 +201,8 @@ Before finishing:
 
 6. Ensure the project compiles with no new warnings or errors.
 7. Run the relevant scene(s) in Play Mode and check basic behaviour.
-8. Update:
+6. Update:
 
-   * `ARCHITECTURE.md` for system-level changes.
    * `BACKLOG.md` for task status and follow-ups.
    * `UNITY_CONFIGURATION.md` for any setup or scene changes.
    * `GAME_LORE.md` if new lore is introduced or expanded.
