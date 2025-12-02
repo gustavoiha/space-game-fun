@@ -22,4 +22,6 @@ ProjectSettings/
 *.log
 *.meta
 *.mat
+*.asset
+*.shader
 .DS_Store
