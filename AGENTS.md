@@ -10,6 +10,7 @@ Guidelines for AI coding agents collaborating on this project.
   - Small, focused, isolated scripts
 - Always preserve and respect the existing architecture and conventions.
 - Always follow and preserve the canon in `GAME_LORE.md` when implementing features or content.
+- Given a task, if no code is necessary, update `UNITY_CONFIGURATION.md` file with instructions for human game developer to implement and test.
 
 ## 2. Mandatory Files To Maintain
 
@@ -17,6 +18,7 @@ Guidelines for AI coding agents collaborating on this project.
   - Keep a comprehensive, step-by-step guide for setting up and updating the Unity project.
   - Whenever scenes, prefabs, project settings, or assets must change, add/update instructions.
   - Reference the related backlog item(s) when changes are required.
+  - TODO / DONE statuses will be used based on human progress.
 
 - `ARCHITECTURE.md`
   - Maintain an up-to-date, concise list of each script/class.
@@ -25,7 +27,7 @@ Guidelines for AI coding agents collaborating on this project.
 
 - `BACKLOG.md` (if present)
   - Keep tasks accurate and clearly scoped.
-  - Update statuses (e.g. TODO / IN PROGRESS / DONE) based on work performed.
+  - Update statuses (e.g. TODO / DONE) based on work performed.
   - Add notes about what changed and any follow-up work needed.
 
 ## 3. Coding Standards
