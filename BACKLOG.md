@@ -17,8 +17,10 @@ The backlog has been updated to reflect a **multi-scene, multi-physics star syst
   -  When map is opened, first you see the star system map. But as soon as you zoom in or out, the galaxy map appears. When map is opened, it should open in the star system view, with the player's ship in the center, and close to it. There should be a variable similar to SystemMapWorldRadius that defines the size of the initial system area rendered in the map when first opened.
   -  Fixed: system map now opens centered on the player with a configurable initial system view radius to prevent unintended galaxy view switching when zooming.
 
-2. Bug2 [TODO]
+2. Bug2 [DONE]
   - Player ship icon in the star system map does not track player ship and looks still.
+  - Fixed: system map now uses runtime system center/radius so the player ship icon follows the ship position reliably.
+  - Wormhole icons now read gate transforms from the active system runtime so their positions match the in-scene layout.
 
 3. Bug3 [TODO]
   - In-system star renders as sphere with no texture or materials

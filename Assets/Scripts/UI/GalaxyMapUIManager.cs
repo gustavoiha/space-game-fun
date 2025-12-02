@@ -1030,6 +1030,7 @@ public class GalaxyMapUIManager : MonoBehaviour
 
         CreateSystemWormholeIcons(systemId, system.position);
         EnsurePlayerShipIcon();
+        UpdateWormholeIconPositions();
         RefreshSystemMapVisuals();
         UpdatePlayerShipIconPosition();
         ApplyZoom(currentZoom);
@@ -1045,6 +1046,10 @@ public class GalaxyMapUIManager : MonoBehaviour
             return;
 
         float angleStep = 360f / Mathf.Max(1, neighbors.Count);
+        float uiRadius = GetSystemMapUiRadius();
+        float worldRadius = GetSystemMapWorldRadius();
+        float worldToUiScale = worldRadius > 0.001f ? uiRadius / worldRadius : 0f;
+        bool hasRuntime = TryGetActiveRuntime(out var runtime);
 
         for (int i = 0; i < neighbors.Count; i++)
         {
@@ -1054,7 +1059,12 @@ public class GalaxyMapUIManager : MonoBehaviour
             Vector2 dir = GetDirectionToNeighbor(systemPosition, neighborId, i * angleStep);
             RectTransform icon = Instantiate(systemWormholeIconPrefab, systemMapContentRect);
             icon.name = $"System_{systemId}_Wormhole_{wormholeId}";
-            icon.anchoredPosition = dir * GetSystemMapUiRadius();
+            icon.anchoredPosition = hasRuntime &&
+                                    worldToUiScale > 0.0001f &&
+                                    runtime.TryGetGateForWormhole(wormholeId, out var gate) &&
+                                    gate != null
+                ? new Vector2(gate.transform.position.x - runtime.GateRingCenter.x, gate.transform.position.z - runtime.GateRingCenter.z) * worldToUiScale
+                : dir * uiRadius;
 
             systemWormholeIconsById[wormholeId] = icon;
         }
@@ -1087,6 +1097,7 @@ public class GalaxyMapUIManager : MonoBehaviour
     private void UpdateSystemMapDynamicElements()
     {
         UpdatePlayerShipIconPosition();
+        UpdateWormholeIconPositions();
     }
 
     private void UpdatePlayerShipIconPosition()
@@ -1103,6 +1114,36 @@ public class GalaxyMapUIManager : MonoBehaviour
         playerShipIconInstance.anchoredPosition = anchoredPosition;
     }
 
+    /// <summary>
+    /// Sync system map wormhole icon positions with runtime gate transforms when available.
+    /// </summary>
+    private void UpdateWormholeIconPositions()
+    {
+        if (!TryGetActiveRuntime(out var runtime))
+            return;
+
+        float worldRadius = GetSystemMapWorldRadius();
+        float uiRadius = GetSystemMapUiRadius();
+        if (worldRadius < 0.001f || uiRadius < 0.001f)
+            return;
+
+        float worldToUiScale = uiRadius / worldRadius;
+
+        var gates = runtime.Gates;
+        for (int i = 0; i < gates.Count; i++)
+        {
+            var gate = gates[i];
+            if (gate == null)
+                continue;
+
+            if (!systemWormholeIconsById.TryGetValue(gate.WormholeId, out var icon) || icon == null)
+                continue;
+
+            Vector3 offset = gate.transform.position - runtime.GateRingCenter;
+            icon.anchoredPosition = new Vector2(offset.x, offset.z) * worldToUiScale;
+        }
+    }
+
     private bool TryGetPlayerShipAnchoredPosition(out Vector2 anchoredPosition)
     {
         anchoredPosition = Vector2.zero;
@@ -1116,12 +1157,44 @@ public class GalaxyMapUIManager : MonoBehaviour
             return false;
 
         float uiRadius = GetSystemMapUiRadius();
-        Vector3 center = gm.CurrentSystemWorldPosition;
+        Vector3 center = GetActiveSystemCenter();
         Vector3 shipPos = gm.PlayerShip.transform.position;
         Vector3 offset = shipPos - center;
 
         anchoredPosition = new Vector2(offset.x, offset.z) * (uiRadius / worldRadius);
         return true;
+    }
+
+    /// <summary>
+    /// Resolve the world-space center used for the active system map, preferring runtime data when available.
+    /// </summary>
+    private Vector3 GetActiveSystemCenter()
+    {
+        if (TryGetActiveRuntime(out var runtime))
+        {
+            return runtime.GateRingCenter;
+        }
+
+        var gm = GameManager.Instance;
+        if (gm != null)
+        {
+            return gm.CurrentSystemWorldPosition;
+        }
+
+        return Vector3.zero;
+    }
+
+    /// <summary>
+    /// Attempt to resolve the active star system runtime from the simulation manager.
+    /// </summary>
+    private bool TryGetActiveRuntime(out StarSystemRuntime runtime)
+    {
+        runtime = null;
+        var simulationManager = GalaxySimulationManager.Instance;
+        if (simulationManager == null)
+            return false;
+
+        return simulationManager.RuntimesBySystemId.TryGetValue(activeSystemMapSystemId, out runtime) && runtime != null;
     }
 
     private float GetSystemMapUiRadius()
@@ -1152,6 +1225,11 @@ public class GalaxyMapUIManager : MonoBehaviour
 
     private float GetSystemMapWorldRadius()
     {
+        if (TryGetActiveRuntime(out var runtime) && runtime.SystemRadius > 0f)
+        {
+            return runtime.SystemRadius;
+        }
+
         if (galaxy != null && activeSystemMapSystemId >= 0 &&
             galaxy.SystemsById.TryGetValue(activeSystemMapSystemId, out var systemNode) &&
             systemNode.systemRadius > 0f)
@@ -1159,14 +1237,15 @@ public class GalaxyMapUIManager : MonoBehaviour
             return systemNode.systemRadius;
         }
 
-        if (GameManager.Instance != null && GameManager.Instance.CurrentSystemRadius > 0f)
+        var gm = GameManager.Instance;
+        if (gm != null && gm.CurrentSystemRadius > 0f)
         {
-            return GameManager.Instance.CurrentSystemRadius;
+            return gm.CurrentSystemRadius;
         }
 
-        if (GameManager.Instance != null && GameManager.Instance.GateRingRadius > 0f)
+        if (gm != null && gm.GateRingRadius > 0f)
         {
-            return GameManager.Instance.GateRingRadius;
+            return gm.GateRingRadius;
         }
 
         return systemMapWorldRadius;
