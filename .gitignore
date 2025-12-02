@@ -11,6 +11,7 @@ Temp/
 UserSettings/
 ProjectSettings/
 *.csproj
+*.hdr
 *.sln
 *.user
 *.unityproj
