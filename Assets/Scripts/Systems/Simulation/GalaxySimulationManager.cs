@@ -48,6 +48,7 @@ public class GalaxySimulationManager : MonoBehaviour
 
     private readonly Dictionary<int, StarSystemRuntime> runtimesBySystemId = new Dictionary<int, StarSystemRuntime>();
     private readonly Dictionary<GameObject, int> shipToSystemMap = new Dictionary<GameObject, int>();
+    private readonly List<StarSystemRuntime> simulationBuffer = new List<StarSystemRuntime>();
 
     /// <summary>
     /// Collection of active star system runtimes keyed by system ID.
@@ -83,15 +84,13 @@ public class GalaxySimulationManager : MonoBehaviour
 
         Instance = this;
         DontDestroyOnLoad(gameObject);
+
+        ResolveDependencies();
     }
 
     private void Start()
     {
-        if (galaxy == null)
-            galaxy = GalaxyGenerator.Instance;
-
-        if (discoveryState == null)
-            discoveryState = GameDiscoveryState.Instance;
+        ResolveDependencies();
 
         if (discoveryState != null)
         {
@@ -120,13 +119,19 @@ public class GalaxySimulationManager : MonoBehaviour
             return;
 
         float dt = Time.fixedDeltaTime;
+        simulationBuffer.Clear();
+
         foreach (var pair in runtimesBySystemId)
         {
-            StarSystemRuntime runtime = pair.Value;
-            if (runtime != null)
+            if (pair.Value != null)
             {
-                runtime.Simulate(dt);
+                simulationBuffer.Add(pair.Value);
             }
+        }
+
+        foreach (var runtime in simulationBuffer)
+        {
+            runtime.Simulate(dt);
         }
     }
 
@@ -143,21 +148,62 @@ public class GalaxySimulationManager : MonoBehaviour
         if (runtimesBySystemId.TryGetValue(systemId, out var existing))
             return existing;
 
-        Scene scene = SceneManager.CreateScene($"StarSystem_{systemId}", new CreateSceneParameters(LocalPhysicsMode.Physics3D));
-        GameObject runtimeRoot = new GameObject($"StarSystemRuntime_{systemId}");
-        SceneManager.MoveGameObjectToScene(runtimeRoot, scene);
+        ResolveDependencies();
+
+        string sceneName = $"StarSystem_{systemId}";
+        Scene scene = SceneManager.GetSceneByName(sceneName);
+        if (!scene.IsValid())
+        {
+            scene = SceneManager.CreateScene(sceneName, new CreateSceneParameters(LocalPhysicsMode.Physics3D));
+        }
+
+        StarSystemRuntime runtime = FindOrCreateRuntime(systemId, scene);
 
         float systemRadius = ResolveSystemRadius(systemId);
-        StarSystemRuntime runtime = runtimeRoot.AddComponent<StarSystemRuntime>();
         runtime.Initialize(systemId, scene, systemRadius);
+        runtime.ConfigureGatePlacement(gateRingRadius, defaultGateRingCenter != null ? (Vector3?)defaultGateRingCenter.position : null);
 
         MoveStarVisualToScene(systemId, scene);
+
+        if (wormholeGatePrefab == null)
+        {
+            Debug.LogWarning("GalaxySimulationManager: Wormhole gate prefab is not assigned. Gates will not be spawned.");
+        }
+
         runtime.BuildWormholeGates(galaxy, wormholeGatePrefab, systemPositionScale);
 
         runtimesBySystemId[systemId] = runtime;
         RefreshLoadedSystemsLabel();
 
         return runtime;
+    }
+
+    private StarSystemRuntime FindOrCreateRuntime(int systemId, Scene scene)
+    {
+        StarSystemRuntime runtime = FindRuntimeInScene(systemId, scene);
+        if (runtime != null)
+            return runtime;
+
+        GameObject runtimeRoot = new GameObject($"StarSystemRuntime_{systemId}");
+        SceneManager.MoveGameObjectToScene(runtimeRoot, scene);
+        return runtimeRoot.AddComponent<StarSystemRuntime>();
+    }
+
+    private StarSystemRuntime FindRuntimeInScene(int systemId, Scene scene)
+    {
+        if (!scene.IsValid())
+            return null;
+
+        foreach (GameObject root in scene.GetRootGameObjects())
+        {
+            StarSystemRuntime runtime = root.GetComponent<StarSystemRuntime>();
+            if (runtime != null && runtime.SystemId == systemId)
+            {
+                return runtime;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -176,8 +222,14 @@ public class GalaxySimulationManager : MonoBehaviour
         if (node.starSystemInstance == null)
             return;
 
-        SceneManager.MoveGameObjectToScene(node.starSystemInstance.gameObject, scene);
-        node.starSystemInstance.gameObject.SetActive(true);
+        Transform starTransform = node.starSystemInstance.transform;
+        if (starTransform.parent != null)
+        {
+            starTransform.SetParent(null);
+        }
+
+        SceneManager.MoveGameObjectToScene(starTransform.gameObject, scene);
+        starTransform.gameObject.SetActive(true);
     }
 
     /// <summary>
@@ -292,6 +344,15 @@ public class GalaxySimulationManager : MonoBehaviour
         }
 
         return gateRingRadius;
+    }
+
+    private void ResolveDependencies()
+    {
+        if (galaxy == null)
+            galaxy = GalaxyGenerator.Instance;
+
+        if (discoveryState == null)
+            discoveryState = GameDiscoveryState.Instance;
     }
 
     private void OnCurrentSystemChanged(int systemId)

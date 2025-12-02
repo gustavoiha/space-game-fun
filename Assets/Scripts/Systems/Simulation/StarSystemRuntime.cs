@@ -96,6 +96,21 @@ public class StarSystemRuntime : MonoBehaviour
     }
 
     /// <summary>
+    /// Configure gate placement defaults supplied by the simulation manager.
+    /// </summary>
+    /// <param name="ringRadius">Radius from the system center where gates should appear.</param>
+    /// <param name="fallbackCenter">Optional explicit center used when galaxy data is missing.</param>
+    public void ConfigureGatePlacement(float ringRadius, Vector3? fallbackCenter)
+    {
+        gateRingRadius = Mathf.Max(1f, ringRadius);
+
+        if (fallbackCenter.HasValue)
+        {
+            gateRingCenter = fallbackCenter.Value;
+        }
+    }
+
+    /// <summary>
     /// Configure gate placement and spawn gates for all neighbors of this system.
     /// </summary>
     /// <param name="galaxy">Galaxy data source providing system and wormhole information.</param>
@@ -111,6 +126,9 @@ public class StarSystemRuntime : MonoBehaviour
         if (galaxy.TryGetSystem(systemId, out var node))
         {
             systemRadius = Mathf.Max(systemRadius, Mathf.Max(0f, node.systemRadius));
+            float gateRadiusFromStar = node.starRadius * 1.5f;
+            float gateRadiusFromSystem = Mathf.Max(systemRadius * 0.25f, 10f);
+            gateRingRadius = Mathf.Max(gateRingRadius, gateRadiusFromStar, gateRadiusFromSystem);
             gateRingCenter = new Vector3(node.position.x * systemPositionScale, 0f, node.position.y * systemPositionScale);
         }
 
@@ -156,10 +174,11 @@ public class StarSystemRuntime : MonoBehaviour
                 gateRot = Quaternion.LookRotation((center - gatePos).normalized, Vector3.up);
             }
 
-            WormholeGate gateInstance = Instantiate(gatePrefab, gatePos, gateRot, gateContainer);
+            WormholeGate gateInstance = Instantiate(gatePrefab, gatePos, gateRot);
             gateInstance.SetWormholeId(wormholeId);
             gateInstance.SetExplicitTargetSystemId(neighborId);
             SceneManager.MoveGameObjectToScene(gateInstance.gameObject, owningScene);
+            gateInstance.transform.SetParent(gateContainer, true);
             gates.Add(gateInstance);
         }
     }
