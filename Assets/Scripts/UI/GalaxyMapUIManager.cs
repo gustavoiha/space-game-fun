@@ -51,6 +51,13 @@ public class GalaxyMapUIManager : MonoBehaviour
     [Tooltip("Prefab used to render the player's ship in a system map.")]
     [SerializeField] private RectTransform playerShipIconPrefab;
 
+    [Header("System Map Icon Scaling")]
+    [Tooltip("Minimum UI size applied to star and wormhole icons after scaling from world space.")]
+    [SerializeField] private float minSystemIconSize = 8f;
+
+    [Tooltip("Maximum UI size applied to star and wormhole icons to prevent them from dominating the view.")]
+    [SerializeField] private float maxSystemIconSize = 160f;
+
     [Header("Visuals")]
     [Tooltip("Color for undiscovered frontier systems (neighbors of discovered systems).")]
     [SerializeField] private Color undiscoveredColor = Color.black;
@@ -1021,14 +1028,19 @@ public class GalaxyMapUIManager : MonoBehaviour
         if (!galaxy.SystemsById.TryGetValue(systemId, out var system))
             return;
 
+        float uiRadius = GetSystemMapUiRadius();
+        float worldRadius = GetSystemMapWorldRadius();
+        float worldToUiScale = ComputeWorldToUiScale(worldRadius, uiRadius);
+
         if (systemStarIconPrefab != null)
         {
             systemStarIconInstance = Instantiate(systemStarIconPrefab, systemMapContentRect);
             systemStarIconInstance.anchoredPosition = Vector2.zero;
             systemStarIconInstance.name = $"System_{systemId}_Star";
+            ResizeStarIcon(system, worldToUiScale);
         }
 
-        CreateSystemWormholeIcons(systemId, system.position);
+        CreateSystemWormholeIcons(systemId, system.position, worldToUiScale, uiRadius);
         EnsurePlayerShipIcon();
         UpdateWormholeIconPositions();
         RefreshSystemMapVisuals();
@@ -1036,7 +1048,7 @@ public class GalaxyMapUIManager : MonoBehaviour
         ApplyZoom(currentZoom);
     }
 
-    private void CreateSystemWormholeIcons(int systemId, Vector2 systemPosition)
+    private void CreateSystemWormholeIcons(int systemId, Vector2 systemPosition, float worldToUiScale, float uiRadius)
     {
         if (systemMapContentRect == null || galaxy == null || systemWormholeIconPrefab == null)
             return;
@@ -1046,10 +1058,8 @@ public class GalaxyMapUIManager : MonoBehaviour
             return;
 
         float angleStep = 360f / Mathf.Max(1, neighbors.Count);
-        float uiRadius = GetSystemMapUiRadius();
-        float worldRadius = GetSystemMapWorldRadius();
-        float worldToUiScale = worldRadius > 0.001f ? uiRadius / worldRadius : 0f;
         bool hasRuntime = TryGetActiveRuntime(out var runtime);
+        float defaultSize = GetDefaultIconSize(systemWormholeIconPrefab);
 
         for (int i = 0; i < neighbors.Count; i++)
         {
@@ -1059,12 +1069,20 @@ public class GalaxyMapUIManager : MonoBehaviour
             Vector2 dir = GetDirectionToNeighbor(systemPosition, neighborId, i * angleStep);
             RectTransform icon = Instantiate(systemWormholeIconPrefab, systemMapContentRect);
             icon.name = $"System_{systemId}_Wormhole_{wormholeId}";
-            icon.anchoredPosition = hasRuntime &&
-                                    worldToUiScale > 0.0001f &&
-                                    runtime.TryGetGateForWormhole(wormholeId, out var gate) &&
-                                    gate != null
+            WormholeGate gate = null;
+            bool hasGate = hasRuntime &&
+                           worldToUiScale > 0.0001f &&
+                           runtime.TryGetGateForWormhole(wormholeId, out gate) &&
+                           gate != null;
+
+            icon.anchoredPosition = hasGate
                 ? new Vector2(gate.transform.position.x - runtime.GateRingCenter.x, gate.transform.position.z - runtime.GateRingCenter.z) * worldToUiScale
                 : dir * uiRadius;
+
+            float gateDiameter = hasGate ? EstimateGateDiameter(gate) : 0f;
+
+            float iconSize = CalculateIconSize(gateDiameter, worldToUiScale, defaultSize);
+            ApplyIconSize(icon, iconSize);
 
             systemWormholeIconsById[wormholeId] = icon;
         }
@@ -1128,6 +1146,7 @@ public class GalaxyMapUIManager : MonoBehaviour
             return;
 
         float worldToUiScale = uiRadius / worldRadius;
+        float defaultSize = GetDefaultIconSize(systemWormholeIconPrefab);
 
         var gates = runtime.Gates;
         for (int i = 0; i < gates.Count; i++)
@@ -1141,6 +1160,10 @@ public class GalaxyMapUIManager : MonoBehaviour
 
             Vector3 offset = gate.transform.position - runtime.GateRingCenter;
             icon.anchoredPosition = new Vector2(offset.x, offset.z) * worldToUiScale;
+
+            float gateDiameter = EstimateGateDiameter(gate);
+            float iconSize = CalculateIconSize(gateDiameter, worldToUiScale, defaultSize);
+            ApplyIconSize(icon, iconSize);
         }
     }
 
@@ -1249,6 +1272,102 @@ public class GalaxyMapUIManager : MonoBehaviour
         }
 
         return systemMapWorldRadius;
+    }
+
+    /// <summary>
+    /// Convert a system's world radius into a UI scale factor using the current system map radius.
+    /// </summary>
+    private float ComputeWorldToUiScale(float worldRadius, float uiRadius)
+    {
+        if (worldRadius <= 0.001f || uiRadius <= 0.001f)
+            return 0f;
+
+        return uiRadius / worldRadius;
+    }
+
+    /// <summary>
+    /// Size the central star icon so it reflects the generated star radius on the map.
+    /// </summary>
+    private void ResizeStarIcon(GalaxyGenerator.SystemNode system, float worldToUiScale)
+    {
+        if (systemStarIconInstance == null)
+            return;
+
+        float baseSize = GetDefaultIconSize(systemStarIconPrefab, systemStarIconInstance);
+        float starDiameter = system != null ? Mathf.Max(0f, system.starRadius) * 2f : 0f;
+        float iconSize = CalculateIconSize(starDiameter, worldToUiScale, baseSize);
+        ApplyIconSize(systemStarIconInstance, iconSize);
+    }
+
+    /// <summary>
+    /// Convert a world-space diameter into a clamped UI size.
+    /// </summary>
+    private float CalculateIconSize(float worldDiameter, float worldToUiScale, float fallbackSize)
+    {
+        float size = fallbackSize;
+
+        if (worldDiameter > 0f && worldToUiScale > 0f)
+        {
+            size = worldDiameter * worldToUiScale;
+        }
+
+        float minSize = minSystemIconSize > 0f ? minSystemIconSize : 0f;
+        float maxSize = maxSystemIconSize > 0f ? Mathf.Max(maxSystemIconSize, minSize) : float.MaxValue;
+        size = Mathf.Clamp(size, minSize, maxSize);
+
+        return size;
+    }
+
+    /// <summary>
+    /// Apply a square size to an icon while respecting current anchors.
+    /// </summary>
+    private void ApplyIconSize(RectTransform rect, float size)
+    {
+        if (rect == null || size <= 0f)
+            return;
+
+        rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, size);
+        rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, size);
+    }
+
+    /// <summary>
+    /// Resolve a baseline size for an icon using prefab or instance sizing.
+    /// </summary>
+    private float GetDefaultIconSize(RectTransform prefab, RectTransform instanceOverride = null)
+    {
+        if (instanceOverride != null && instanceOverride.sizeDelta.x > 0f)
+            return instanceOverride.sizeDelta.x;
+
+        if (prefab != null && prefab.sizeDelta.x > 0f)
+            return prefab.sizeDelta.x;
+
+        return minSystemIconSize > 0f ? minSystemIconSize : 10f;
+    }
+
+    /// <summary>
+    /// Estimate a gate's diameter from its collider bounds or transform scale.
+    /// </summary>
+    private float EstimateGateDiameter(WormholeGate gate)
+    {
+        if (gate == null)
+            return 0f;
+
+        float diameter = 0f;
+        Collider gateCollider = gate.GetComponent<Collider>();
+        if (gateCollider != null)
+        {
+            Bounds bounds = gateCollider.bounds;
+            diameter = Mathf.Max(bounds.size.x, bounds.size.z);
+            diameter = Mathf.Max(diameter, bounds.size.y);
+        }
+
+        if (diameter <= 0f)
+        {
+            Vector3 scale = gate.transform.lossyScale;
+            diameter = Mathf.Max(scale.x, scale.z);
+        }
+
+        return diameter;
     }
 
     private int FindWormholeIdBetween(int systemAId, int systemBId)
