@@ -209,10 +209,6 @@ The backlog has been updated to reflect a **multi-scene, multi-physics star syst
   - By default, the map opens in the local star system view.
   - Handles smooth switching between system view and galaxy view based on zoom.
 
-- **M2.10 – Galaxy Map State Container (TODO)**
-  - Extract galaxy map data (systems, factions, hazards, ownership flags) into a dedicated `GalaxyState.cs` script separate from UI.
-  - Keep `GalaxyMapUIManager` reading from this state container (backed by `GalaxyGenerator`/discovery data) rather than storing map state internally.
-
 ### M2 – Interaction
 
 - **M2.6 – System Selection (IMPLEMENTED)**
@@ -227,6 +223,10 @@ The backlog has been updated to reflect a **multi-scene, multi-physics star syst
 
 - **M2.9 – System Mouse Hovering (TODO)**
   - Enable hover tooltips for systems showing their information using the existing info panel.
+
+- **M2.10 – Galaxy Map State Container (TODO)**
+  - Separate the galaxy map’s data (which systems exist and their positions) into a small `GalaxyState.cs` script instead of keeping it mixed into other scripts.
+  - Make `GalaxyMapUIManager` read-only against this state container (fed by `GalaxyGenerator`/discovery data) so the map UI no longer owns map state.
 
 ---
 

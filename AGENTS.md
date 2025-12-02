@@ -29,7 +29,7 @@ This repository contains a retro-futuristic space exploration and reconstruction
 
 Before making changes, agents must review and rely on the following files:
 
-* `LORE.md` – Canonical game lore, factions, tone, and terminology.
+* `GAME_LORE.md` – Canonical game lore, factions, tone, and terminology.
 * `ARCHITECTURE.md` – High-level code and system architecture description.
 * `BACKLOG.md` – Task list and prioritisation for features and technical work.
 * `UNITY_CONFIGURATION.md` – Step-by-step scene and project setup instructions.
@@ -114,7 +114,7 @@ Agents must follow these guidelines for all Unity C# code:
 
 Whenever an agent changes the code, scene, or project configuration, they must ensure the following files are up to date:
 
-### 5.1 `LORE.md`
+### 5.1 `GAME_LORE.md`
 
 Update only when:
 
@@ -219,7 +219,7 @@ Agents must always double-check their work. At minimum, before considering work 
 
 4. **Documentation**
 
-   * Confirm `LORE.md`, `ARCHITECTURE.md`, `BACKLOG.md`, and `UNITY_CONFIGURATION.md` are updated as needed.
+   * Confirm `GAME_LORE.md`, `ARCHITECTURE.md`, `BACKLOG.md`, and `UNITY_CONFIGURATION.md` are updated as needed.
    * Confirm instructions are clear, ordered, and actionable.
 
 5. **Edge Cases**
@@ -231,10 +231,10 @@ Agents must always double-check their work. At minimum, before considering work 
 
 ## 8. File-Specific Notes
 
-### 8.1 LORE.md
+### 8.1 GAME_LORE.md
 
 * Source of truth for names, factions, events, and narrative tone.
-* When adding mechanics tied to lore (e.g., wormhole networks, factions, alien polities), ensure they are consistent with `LORE.md`.
+* When adding mechanics tied to lore (e.g., wormhole networks, factions, alien polities), ensure they are consistent with `GAME_LORE.md`.
 * Keep sections short and structured; avoid lore bloat without gameplay reason.
 
 ### 8.2 ARCHITECTURE.md
@@ -266,7 +266,7 @@ Before starting:
 
 1. Read or refresh:
 
-   * `LORE.md`
+   * `GAME_LORE.md`
    * `ARCHITECTURE.md`
    * `BACKLOG.md`
    * `UNITY_CONFIGURATION.md`
@@ -287,7 +287,7 @@ Before finishing:
    * `ARCHITECTURE.md` for system-level changes.
    * `BACKLOG.md` for task status and follow-ups.
    * `UNITY_CONFIGURATION.md` for any setup or scene changes.
-   * `LORE.md` if new lore is introduced or expanded.
+   * `GAME_LORE.md` if new lore is introduced or expanded.
 9. Perform a final self-review of code and docs for clarity and consistency.
 
 If any of these steps cannot be fully completed (e.g., missing context or uncertainty), leave clear notes in `BACKLOG.md` and minimal comments in code describing what remains open.
