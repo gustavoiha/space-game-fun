@@ -46,6 +46,7 @@ When working in this repository, agents must:
 
    * Prefer tasks described in `BACKLOG.md`.
    * If you create new work items, add them under the appropriate section with clear titles and short descriptions.
+   * Mark each item with either [TODO] or [DONE].
 
 2. **Minimise unnecessary changes**
 
