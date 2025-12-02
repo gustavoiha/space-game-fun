@@ -25,11 +25,6 @@ Guidelines for AI coding agents collaborating on this project.
   - For each entry: purpose, main responsibilities, and important public APIs.
   - Update this file whenever you add, remove, or significantly refactor scripts.
 
-- `BACKLOG.md` (if present)
-  - Keep tasks accurate and clearly scoped.
-  - Update statuses (e.g. TODO / DONE) based on work performed.
-  - Add notes about what changed and any follow-up work needed.
-
 ## 3. Coding Standards
 
 - Prioritize readability, clarity, and maintainability over brevity.
@@ -55,7 +50,6 @@ Guidelines for AI coding agents collaborating on this project.
 - Before coding, read:
   - `GAME_LORE.md`
   - `ARCHITECTURE.md`
-  - `BACKLOG.md`
   - `UNITY_CONFIGURATION.md`
 - Prefer extending existing patterns over introducing new ones.
 - Do not remove or rewrite large sections of code unless clearly necessary; refactor incrementally.
@@ -68,5 +62,5 @@ Guidelines for AI coding agents collaborating on this project.
 - Code compiles without warnings where reasonably possible.
 - New logic is covered by simple, focused tests where applicable (editor/runtime).
 - Public APIs are consistent and documented in `ARCHITECTURE.md`.
-- Relevant docs (`UNITY_CONFIGURATION.md`, `BACKLOG.md`) are updated.
+- Relevant docs (`UNITY_CONFIGURATION.md`, `ARCHITECTURE.md`) are updated.
 - Lore, naming, and behavior are consistent with `GAME_LORE.md`.
