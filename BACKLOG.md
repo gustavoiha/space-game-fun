@@ -119,7 +119,7 @@ The backlog has been updated to reflect a **multi-scene, multi-physics star syst
 
 **Goal:** Move from “all systems share one physical space” to a **multi-scene, multi-physics** setup where each star system has its own scene and physics world, but all are simulated in real time.
 
-- **M0B.1 – Persistent Galaxy Root Scene [TODO]**
+- **M0B.1 – Persistent Galaxy Root Scene [DONE]**
   - Create a dedicated “GalaxyRoot” scene that stays loaded:
     - Hosts `GalaxyGenerator`, `GameDiscoveryState`, `GalaxySimulationManager`, and global UI (map, HUD, menus).
   - Ensure this scene can bootstrap the initial star system.
