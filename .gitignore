@@ -4,6 +4,9 @@ Library/**/*
 Temp/
 UserSettings/
 ProjectSettings/
+Assets/Scenarios/MilkyWay/
+Assets/Scenarios/BlackHole/
+*.tss
 *.csproj
 *.hdr
 *.sln
