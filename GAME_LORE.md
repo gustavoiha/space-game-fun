@@ -443,9 +443,36 @@ Stronger or more advanced modules cost more resources, consume more power, and r
 
 ---
 
-## 9. Campaign Arc
+## 9 Ships and stations
 
-### 9.1 Act I – Before the Coup
+Every faction follows the same ship and station types. Each faction will differ slightly in hitpoints, speed, materials for construction, etc.
+
+### 9.1 Civilian ships:
+
+* Assembler: construction ship
+* Courier: medium cargo ship
+* Hauler: large cargo ship
+* Researcher: science and research ship
+* Habitat: civilian habitation ship
+
+### 9.2 Military ships:
+
+* Fighter
+* Corvette
+* Frigate
+* Destroyer
+* Battleship
+* Carrier
+
+### 9.2 Stations:
+
+* Colony supply hub: sends and receives resources to ground colonies
+
+---
+
+## 10. Campaign Arc
+
+### 10.1 Act I – Before the Coup
 
 * The Horizon Initiative operates within the Solar System as a semi-independent organisation.
 * Wormholes are a new, poorly understood phenomenon.
@@ -465,7 +492,7 @@ Stronger or more advanced modules cost more resources, consume more power, and r
 * Build or refit a **research ship**.
 * Research and develop the **gravitational shield** necessary for safe wormhole traversal.
 
-### 9.2 The Helios Coup & Escape
+### 10.2 The Helios Coup & Escape
 
 * Helios formally declares an emergency and assumes central authority.
 * Independent organisations, including Horizon, are branded risks or traitors.
@@ -481,7 +508,7 @@ Stronger or more advanced modules cost more resources, consume more power, and r
   * Reach a wormhole.
   * Escape with a core refugee fleet into an uncharted system.
 
-### 9.3 Act II – Beyond the Sun
+### 10.3 Act II – Beyond the Sun
 
 * On the far side of the wormhole:
 
@@ -496,7 +523,7 @@ Stronger or more advanced modules cost more resources, consume more power, and r
 * Engage in diplomacy, trade, and conflict with other factions (human, alien, AI).
 * Discover more of the wormhole network.
 
-### 9.4 Act III – Return & Reclaim
+### 10.4 Act III – Return & Reclaim
 
 * Long-term objective:
 
