@@ -3,7 +3,7 @@
     <ui:VisualElement name="main-menu-root" class="main-menu">
         <ui:VisualElement class="menu-panel">
             <ui:Label text="Horizon Initiative" class="menu-title" />
-            <ui:Label text="Wormhole Era Command" class="menu-subtitle" />
+            <ui:Label text="WORMHOLE ERA COMMAND" class="menu-subtitle" />
             <ui:Button name="new-game-button" text="New Game" class="primary-button" />
         </ui:VisualElement>
         <ui:VisualElement name="loading-overlay" class="loading-overlay">
