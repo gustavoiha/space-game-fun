@@ -58,13 +58,13 @@
    - Add a new scene named `MainMenu` and place it at the top of **File → Build Settings → Scenes In Build** so it loads before gameplay scenes.
    - Add an empty GameObject named `MenuBootstrap` and attach **GameInitializer** (`Assets/MainMenu/Scripts/GameInitializer.cs`).
 
-2. Create the UI Toolkit layout [TODO]
+2. Create the UI Toolkit layout [DONE]
    - Add a **UIDocument** component to `MenuBootstrap` (or a dedicated UI GameObject) with a Panel Settings asset suitable for your target platform (match the Game view resolution and reference DPI scaling).
-   - Create a UXML at `Assets/MainMenu/UI/MainMenu.uxml` containing:
-     - A root `VisualElement` with a full-screen flex layout and padding using USS for spacing.
-     - A `Button` named `new-game-button` labeled "New Game". Keep the button focusable for keyboard/console and set a minimum size in USS for accessibility.
-     - A `VisualElement` named `loading-overlay` that covers the screen (position absolute, full stretch) with a dark translucent background and a centered spinner/text. Set its initial **Display** style to **None** in USS; GameInitializer will toggle it.
-   - Add a USS file (e.g., `Assets/MainMenu/UI/MainMenu.uss`) and reference it from the UXML. Use `:hover` / `:active` styles for the button and ensure text contrast meets accessibility guidelines.
+   - Use `Assets/MainMenu/UI/MainMenu.uxml`:
+     - Root `VisualElement` (`name="main-menu-root"`) uses a full-screen flex layout with padding and a Horizon-inspired gradient background (see `Assets/MainMenu/UI/MainMenu.uss`).
+     - `Button` named `new-game-button` labeled "New Game" remains focusable for keyboard/console. USS sets a minimum 240×56 size plus hover/active styles that retain high text contrast.
+     - `VisualElement` named `loading-overlay` stretches absolutely over the view with a translucent dark veil and centered spinner/text. Its default **display** is **none**; GameInitializer toggles it while loading.
+   - Styling lives in `Assets/MainMenu/UI/MainMenu.uss` (referenced by the UXML). Adjust colors there if you need alternate themes while preserving contrast.
 
 3. Wire the GameInitializer [TODO]
    - In the **GameInitializer** component:

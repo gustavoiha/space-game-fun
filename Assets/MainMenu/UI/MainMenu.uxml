@@ -1,0 +1,16 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
+    <ui:Style src="MainMenu.uss" />
+    <ui:VisualElement name="main-menu-root" class="main-menu">
+        <ui:VisualElement class="menu-panel">
+            <ui:Label text="Horizon Initiative" class="menu-title" />
+            <ui:Label text="Wormhole Era Command" class="menu-subtitle" />
+            <ui:Button name="new-game-button" text="New Game" class="primary-button" />
+        </ui:VisualElement>
+        <ui:VisualElement name="loading-overlay" class="loading-overlay">
+            <ui:VisualElement class="loading-overlay__content">
+                <ui:VisualElement class="loading-spinner" />
+                <ui:Label text="Preparing jump…" class="loading-text" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>
