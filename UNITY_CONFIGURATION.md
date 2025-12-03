@@ -66,7 +66,7 @@
      - `VisualElement` named `loading-overlay` stretches absolutely over the view with a translucent dark veil and centered spinner/text. Its default **display** is **none**; GameInitializer toggles it while loading.
    - Styling lives in `Assets/MainMenu/UI/MainMenu.uss` (referenced by the UXML). Adjust colors there if you need alternate themes while preserving contrast.
 
-3. Wire the GameInitializer [TODO]
+3. Wire the GameInitializer [DONE]
    - In the **GameInitializer** component:
      - Set **Initialization Strategy** to a `NewGameInitializer` asset (see below).
      - Assign **Menu Document** to the `UIDocument` on the same GameObject (or your UI host).
@@ -74,10 +74,10 @@
      - Assign **Loading Overlay Name** to `loading-overlay` (matches the UXML element that should show while loading).
      - Optionally set **Loading Screen** to a dedicated GameObject overlay (for 3D/Canvas-based spinners); GameInitializer will toggle both the GameObject and the UI Toolkit overlay.
 
-4. Create the initialization asset [TODO]
+4. Create the initialization asset [DONE]
    - In the Project window, right-click → **Create → Game State → New Game Initializer** and save it under `Assets/MainMenu/Scripts/NewGameInitializer.asset`.
    - Set **Initial Scene Name** to the gameplay scene you want to load (default `SpaceSandbox`). Ensure this scene is listed in **Build Settings**.
 
-5. Hook up the button [TODO]
+5. Hook up the button [DONE]
    - Enter Play Mode in `MainMenu` and click the "New Game" button. GameInitializer will start the coroutine, enable the loading overlay, and asynchronously load the specified gameplay scene.
    - When the scene load completes, the loading overlay hides automatically. Future "Load Game" behavior can plug in a different initializer without changing the menu wiring.
