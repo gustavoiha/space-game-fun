@@ -56,28 +56,28 @@
 ## Main Menu Scene (UI Toolkit)
 1. Create the scene [DONE]
    - Add a new scene named `MainMenu` and place it at the top of **File → Build Settings → Scenes In Build** so it loads before gameplay scenes.
-   - Add an empty GameObject named `MenuBootstrap` and attach **GameInitializer** (`Assets/MainMenu/Scripts/GameInitializer.cs`).
+   - Add an empty GameObject named `MenuBootstrap` and attach **MainMenuController** (`Assets/MainMenu/Scripts/MainMenuController.cs`).
 
 2. Create the UI Toolkit layout [DONE]
    - Add a **UIDocument** component to `MenuBootstrap` (or a dedicated UI GameObject) with a Panel Settings asset suitable for your target platform (match the Game view resolution and reference DPI scaling).
    - Use `Assets/MainMenu/UI/MainMenu.uxml`:
      - Root `VisualElement` (`name="main-menu-root"`) uses a full-screen flex layout with padding and a Horizon-inspired gradient background (see `Assets/MainMenu/UI/MainMenu.uss`).
      - `Button` named `new-game-button` labeled "New Game" remains focusable for keyboard/console. USS sets a minimum 240×56 size plus hover/active styles that retain high text contrast.
-     - `VisualElement` named `loading-overlay` stretches absolutely over the view with a translucent dark veil and centered spinner/text. Its default **display** is **none**; GameInitializer toggles it while loading.
+     - `VisualElement` named `loading-overlay` stretches absolutely over the view with a translucent dark veil and centered spinner/text. Its default **display** is **none**; MainMenuController toggles it while loading.
    - Styling lives in `Assets/MainMenu/UI/MainMenu.uss` (referenced by the UXML). Adjust colors there if you need alternate themes while preserving contrast.
 
-3. Wire the GameInitializer [DONE]
-   - In the **GameInitializer** component:
+3. Wire the MainMenuController [DONE]
+   - In the **MainMenuController** component:
      - Set **Initialization Strategy** to a `NewGameInitializer` asset (see below).
      - Assign **Menu Document** to the `UIDocument` on the same GameObject (or your UI host).
      - Leave **New Game Button Name** as `new-game-button` unless you change the UXML name.
      - Assign **Loading Overlay Name** to `loading-overlay` (matches the UXML element that should show while loading).
-     - Optionally set **Loading Screen** to a dedicated GameObject overlay (for 3D/Canvas-based spinners); GameInitializer will toggle both the GameObject and the UI Toolkit overlay.
+     - Optionally set **Loading Screen** to a dedicated GameObject overlay (for 3D/Canvas-based spinners); MainMenuController will toggle both the GameObject and the UI Toolkit overlay.
 
 4. Create the initialization asset [DONE]
    - In the Project window, right-click → **Create → Game State → New Game Initializer** and save it under `Assets/MainMenu/Scripts/NewGameInitializer.asset`.
    - Set **Initial Scene Name** to the gameplay scene you want to load (default `SpaceSandbox`). Ensure this scene is listed in **Build Settings**.
 
 5. Hook up the button [DONE]
-   - Enter Play Mode in `MainMenu` and click the "New Game" button. GameInitializer will start the coroutine, enable the loading overlay, and asynchronously load the specified gameplay scene.
+   - Enter Play Mode in `MainMenu` and click the "New Game" button. MainMenuController will start the coroutine, enable the loading overlay, and asynchronously load the specified gameplay scene.
    - When the scene load completes, the loading overlay hides automatically. Future "Load Game" behavior can plug in a different initializer without changing the menu wiring.

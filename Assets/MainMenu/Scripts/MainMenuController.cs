@@ -9,7 +9,7 @@ namespace SpaceGame.GameState
         public abstract IEnumerator Initialize();
     }
 
-    public class GameInitializer : MonoBehaviour
+    public class MainMenuController : MonoBehaviour
     {
         [Header("Initialization")]
         [SerializeField] private GameInitializationStrategy initializationStrategy;
@@ -48,7 +48,7 @@ namespace SpaceGame.GameState
 
             if (initializationStrategy == null)
             {
-                Debug.LogError("No initialization strategy assigned to GameInitializer.");
+                Debug.LogError("No initialization strategy assigned to MainMenuController.");
                 return;
             }
 

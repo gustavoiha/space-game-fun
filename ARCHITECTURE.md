@@ -24,7 +24,7 @@ This document describes the main C# scripts in the Unity Wormhole Era prototype 
 - **Key Configurable Fields:**
   - `centerPoint`, `minRadius`, `maxRadius`, `alignOutwards`, `randomizeOnStart` (defaults off to allow manual placement).
 
-### Assets/MainMenu/Scripts/GameInitializer.cs
+### Assets/MainMenu/Scripts/MainMenuController.cs
 - **Purpose:** Bridges the main menu UI with a chosen game initialization strategy and coordinates the loading overlay while scenes load.
 - **Responsibilities:**
   - Accepts a `GameInitializationStrategy` ScriptableObject and triggers it when the user presses the New Game button.
