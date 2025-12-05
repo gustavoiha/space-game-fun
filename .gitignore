@@ -12,6 +12,7 @@ Assets/Scenarios/BlackHole/
 *.sln
 *.user
 *.unityproj
+*.fbx
 *.pidb
 *.suo
 *.userprefs

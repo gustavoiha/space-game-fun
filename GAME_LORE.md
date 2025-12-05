@@ -180,15 +180,14 @@ After The Shrouding, the Solar System is scarred but not empty:
 
 **Visual Identity**
 
-* **Emblem:** **Twin Horizons**
-
-  * Two offset arcs (one dark, one light) with a path between.
-* Colours: cool grey, teal/cyan, warm beige or pale gold.
+* Colour palette: cool grey, teal/cyan, warm beige or pale gold.
 * Shape language:
-
   * Layered, offset panels implying “bridging” past and future.
-  * Open station designs with visible growth and extension ports.
   * Clean, purposeful curves.
+  * Gravity generator ring around main ship axis
+
+* **Emblem:** **Twin Horizons**
+  * Two offset arcs (one dark, one light) with a path between.
 
 ---
 
